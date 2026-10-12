@@ -1,7 +1,7 @@
 // G-Wave service worker: app shell offline, station directory network-first, streams never cached.
-const VERSION = 'g-wave-v4';
+const VERSION = 'g-wave-v5';
 const SHELL = [
-  './', 'index.html', 'styles.css', 'app.js', 'asr-worker.js', 'manifest.webmanifest',
+  './', 'index.html', 'styles.css', 'app.js', 'news-sources.js', 'asr-worker.js', 'manifest.webmanifest',
   'vendor/globe.gl.min.js',
   'img/earth-night.jpg', 'img/earth-blue-marble.jpg', 'img/earth-topology.png',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',

@@ -23,3 +23,7 @@
 | [Radio Browser](https://www.radio-browser.info) | Free community directory; station streams belong to their broadcasters |
 | [GDELT Project](https://www.gdeltproject.org) | Free and open; headlines link to the original publishers |
 | [NewsAPI mirror](https://github.com/SauravKanchan/NewsAPI) | Community mirror of NewsAPI data; articles belong to their publishers |
+| Publisher RSS feeds | Headlines and summaries belong to each publisher; G-Wave links to the original articles |
+| [rss2json](https://rss2json.com), [allorigins](https://allorigins.win), [corsproxy.io](https://corsproxy.io), [codetabs](https://codetabs.com) | Free public converters / relays used to read RSS feeds from the browser |
+| [The Guardian Open Platform](https://open-platform.theguardian.com) | Public developer key, non-commercial use |
+| [Hacker News API (Algolia)](https://hn.algolia.com/api), [Spaceflight News API](https://api.spaceflightnewsapi.net), [Wikimedia REST API](https://en.wikipedia.org/api/rest_v1/) | Free public APIs |

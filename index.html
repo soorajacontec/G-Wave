@@ -20,6 +20,10 @@
   try {
     var t = localStorage.getItem('gr-theme'); if (t) document.documentElement.dataset.theme = t;
     var s = localStorage.getItem('gr-skin'); if (s) document.documentElement.dataset.skin = s;
+    var lp = JSON.parse(localStorage.getItem('gw-layout') || '"auto"');
+    var w = window.innerWidth, coarse = window.matchMedia('(pointer: coarse)').matches;
+    var lay = lp === 'mobile' ? 'mobile' : lp === 'tab' ? 'tab' : (w <= 760 ? 'mobile' : (w <= 1180 && coarse) ? 'tab' : 'desktop');
+    document.documentElement.classList.add('lay-' + lay);
   } catch (e) {}
 </script>
 </head>
@@ -42,6 +46,15 @@
     <button class="icon-btn" id="installBtn" hidden aria-label="Install app" title="Install app">
       <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 19h16" /></svg>
     </button>
+    <div class="layout-wrap">
+      <button class="icon-btn" id="layoutBtn" aria-haspopup="true" aria-expanded="false" aria-label="Layout: Auto" title="Layout">
+        <span id="layoutIcon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="13" height="10" rx="1.5"/><rect x="15" y="9" width="6.5" height="11" rx="1.5"/><path d="M6 19h6"/></svg></span><span class="lay-badge" id="layoutBadge">A</span>
+      </button>
+      <div class="layout-menu" id="layoutMenu" role="menu" hidden>
+        <p class="menu-label">Optimise layout for</p>
+        <button class="layout-opt" role="menuitemradio" aria-checked="false" data-layout="auto"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="13" height="10" rx="1.5"/><rect x="15" y="9" width="6.5" height="11" rx="1.5"/><path d="M6 19h6"/></svg><span><b>Auto</b><small>Fits the screen you're on</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button><button class="layout-opt" role="menuitemradio" aria-checked="false" data-layout="mobile"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg><span><b>Mobile</b><small>One-hand layout, bottom sheet</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button><button class="layout-opt" role="menuitemradio" aria-checked="false" data-layout="tab"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3" width="17" height="18" rx="2.5"/><path d="M11 18h2"/></svg><span><b>Tab</b><small>Bigger touch targets, side panel</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+      </div>
+    </div>
     <button class="mode-toggle" id="modeBtn" role="switch" aria-checked="false" aria-label="News mode" title="Switch between Radio and News">
       <span class="mode-thumb" aria-hidden="true"></span>
       <span class="mode-opt opt-radio">
@@ -138,6 +151,10 @@
           </select>
         </label>
         <button class="chip" id="newsEnglish" aria-pressed="true">English only</button>
+        <button class="chip sources-btn" id="sourcesBtn" aria-expanded="false" aria-controls="sourcesPanel" title="News sources">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/></svg>
+          Sources <span id="sourcesCount"></span>
+        </button>
         <button class="bulletin-btn" id="bulletinBtn" aria-pressed="false">
           <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5Z"/></svg>
           <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
@@ -145,6 +162,10 @@
         </button>
       </div>
       <div class="news-filter" id="newsFilter" hidden></div>
+    </div>
+    <div class="sources-panel" id="sourcesPanel" hidden>
+      <div class="sources-top"><b>News sources</b><button class="icon-btn" id="sourcesClose" aria-label="Close sources">✕</button></div>
+      <div class="sources-body" id="sourcesBody"></div>
     </div>
     <ul class="stations news-list" id="newsList" aria-live="polite"></ul>
   </div>
@@ -188,6 +209,7 @@
 <audio id="audioPlain" preload="none"></audio>
 
 <script src="vendor/globe.gl.min.js"></script>
+<script src="news-sources.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

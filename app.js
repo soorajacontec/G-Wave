@@ -21,6 +21,26 @@
     return t ? t === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
   };
 
+  // ---------- layout: Auto / Mobile / Tab ----------
+  const LAYOUT_ICONS = {"auto": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"2.5\" y=\"5\" width=\"13\" height=\"10\" rx=\"1.5\"/><rect x=\"15\" y=\"9\" width=\"6.5\" height=\"11\" rx=\"1.5\"/><path d=\"M6 19h6\"/></svg>", "mobile": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"7\" y=\"2.5\" width=\"10\" height=\"19\" rx=\"2.5\"/><path d=\"M11 18.5h2\"/></svg>", "tab": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3.5\" y=\"3\" width=\"17\" height=\"18\" rx=\"2.5\"/><path d=\"M11 18h2\"/></svg>"};
+  let layoutPref = store.get('gw-layout', 'auto');
+  const coarse = matchMedia('(pointer: coarse)');
+  function resolveLayout() {
+    const w = window.innerWidth;
+    if (layoutPref === 'mobile') return 'mobile';
+    if (layoutPref === 'tab') return 'tab';
+    return w <= 760 ? 'mobile' : (w <= 1180 && coarse.matches) ? 'tab' : 'desktop';
+  }
+  let layoutNow = resolveLayout();
+  // drop-in for the old phone-width media query used throughout the app
+  const mqMobile = { get matches() { return layoutNow === 'mobile'; } };
+  function applyLayoutClass() {
+    const root = document.documentElement;
+    root.classList.remove('lay-mobile', 'lay-tab', 'lay-desktop');
+    root.classList.add('lay-' + layoutNow);
+  }
+  applyLayoutClass();
+
   // ---------- regions ----------
   const REGION = {};
   const addRegion = (name, codes) => codes.split(' ').forEach((c) => (REGION[c] = name));
@@ -118,7 +138,7 @@
   ctrl.autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
   ctrl.autoRotateSpeed = 0.45;
   ctrl.enableDamping = true;
-  globe.pointOfView({ lat: 22, lng: 40, altitude: window.innerWidth < 760 ? 3.5 : 2.6 });
+  globe.pointOfView({ lat: 22, lng: 40, altitude: layoutNow === 'mobile' ? 3.5 : layoutNow === 'tab' ? 2.9 : 2.6 });
 
   // Picking: points are merged into one mesh for speed, so find the nearest station ourselves
   const tip = document.createElement('div'); tip.className = 'globe-tip'; tip.hidden = true; document.body.appendChild(tip);
@@ -172,8 +192,9 @@
     const w = window.innerWidth, h = window.innerHeight;
     globe.width(w).height(h);
     // keep the globe centred in the free space: left of the panel on desktop, between header and sheet on phones
-    if (w > 760) globe.globeOffset([-Math.min(410, w * 0.32) / 2 + 90, 40]);
-    else globe.globeOffset([0, h * 0.02]);
+    if (layoutNow === 'mobile') globe.globeOffset([0, h * 0.02]);
+    else if (layoutNow === 'tab') globe.globeOffset([-(360 + 40) / 2 + 40, 20]);
+    else globe.globeOffset([-Math.min(410, w * 0.32) / 2 + 90, 40]);
   }
   window.addEventListener('resize', sizeGlobe); sizeGlobe();
 
@@ -531,7 +552,6 @@
 
   // Mobile bottom sheet
   const panel = $('#panel');
-  const mqMobile = matchMedia('(max-width: 760px)');
   if (mqMobile.matches) panel.classList.add('collapsed');
   $('#sheetHandle').addEventListener('click', () => {
     if (panel.classList.contains('expanded')) { panel.classList.remove('expanded'); panel.classList.add('collapsed'); }
@@ -903,29 +923,9 @@
   $('#ccBtn').setAttribute('aria-pressed', String(state.ccOn));
 
   // ---------- News mode: world newspaper headlines + news audio ----------
-  // Headlines: GDELT DOC 2.0 API (free, no key, monitors news sites in 100+ languages, CORS-enabled).
-  // Fallback: NewsAPI mirror on GitHub Pages (free, no key; has summaries and images for 6 countries).
+  // Headlines come from many free sources at once (see news-sources.js), merged and de-duplicated,
+  // so one source being slow or down never leaves the list empty.
   // Audio: the browser's built-in speech voices (Web Speech API).
-  const NEWS_TOPICS = {
-    top: '(government OR president OR minister OR election OR economy OR war OR court OR police OR crisis OR protest)',
-    world: '(international OR diplomacy OR "united nations" OR summit OR ceasefire OR sanctions OR embassy)',
-    business: '(economy OR markets OR stocks OR business OR inflation OR trade OR oil OR banking)',
-    tech: '(technology OR "artificial intelligence" OR software OR smartphone OR cyber OR startup)',
-    sports: '(football OR cricket OR olympics OR tennis OR "world cup" OR league OR championship)',
-    health: '(health OR hospital OR disease OR vaccine OR medical OR outbreak)',
-    science: '(science OR climate OR space OR research OR scientists OR environment)',
-  };
-  const NEWS_REGIONS = {
-    Asia: 'india china japan southkorea pakistan bangladesh indonesia philippines malaysia singapore thailand vietnam srilanka nepal taiwan hongkong myanmar cambodia kazakhstan uzbekistan afghanistan mongolia',
-    'Middle East': 'qatar saudiarabia unitedarabemirates kuwait bahrain oman iran iraq israel jordan lebanon syria turkey yemen',
-    Europe: 'unitedkingdom france germany italy spain netherlands poland ukraine russia sweden ireland belgium switzerland austria greece portugal norway denmark',
-    Americas: 'unitedstates canada mexico brazil argentina colombia chile peru venezuela cuba',
-    Africa: 'nigeria southafrica kenya ghana egypt ethiopia morocco algeria tanzania uganda zimbabwe senegal',
-    Oceania: 'australia newzealand fiji papuanewguinea',
-  };
-  const FALLBACK_CAT = { top: 'general', world: 'general', business: 'business', tech: 'technology', sports: 'sports', health: 'health', science: 'science' };
-  const FALLBACK_CC = { all: ['us', 'gb', 'in'], Asia: ['in'], 'Middle East': ['in'], Europe: ['gb', 'fr'], Americas: ['us'], Africa: ['us'], Oceania: ['au'] };
-
   // country name -> ISO code (for flags and globe placement)
   const NAME_CC = {};
   try {
@@ -940,87 +940,62 @@
 
   const news = {
     topic: 'top', region: 'all', span: '3h', english: true, query: '', country: null,
-    items: [], points: [], loading: false, source: '', error: '', open: null,
-    speaking: -1, bulletin: false, lastCall: 0, reqId: 0,
+    items: [], earlier: [], points: [], loading: false, status: [], open: null,
+    speaking: -1, bulletin: false, reqId: 0, keys: store.get('gw-news-keys', {}),
   };
+  const NS = window.GWNewsSources;
 
-  function parseGdeltDate(v) {
-    const m = /^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/.exec(v || '');
-    return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : 0;
+  const normTitle = (t) => String(t || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 70);
+  function mergeNews(raw) {
+    const seen = new Map();
+    for (const a of raw) {
+      if (!a.cc && a.country) a.cc = ccOf(a.country);
+      if (!a.country && a.cc) a.country = countryName(a.cc);
+      const k = normTitle(a.title);
+      if (!k) continue;
+      const prev = seen.get(k);
+      // keep the richest copy of a story (image + summary win)
+      if (!prev || (!prev.image && a.image) || (!prev.desc && a.desc && !(prev.image && !a.image))) seen.set(k, { ...prev, ...a, also: prev ? (prev.also || 1) + 1 : 1 });
+      else prev.also = (prev.also || 1) + 1;
+    }
+    const list = [...seen.values()].sort((x, y) => (y.time || 0) - (x.time || 0));
+    const cutoff = Date.now() - NS.spanMs(news.span);
+    let fresh = list.filter((x) => x.time && x.time >= cutoff);
+    const undated = list.filter((x) => !x.time);
+    const older = list.filter((x) => x.time && x.time < cutoff);
+    if (news.cc) { fresh = fresh.filter((x) => x.cc === news.cc); }
+    return { fresh: [...fresh, ...undated].slice(0, 200), earlier: older.filter((x) => !news.cc || x.cc === news.cc).slice(0, 60) };
   }
-  const gdeltCountry = (name) => 'sourcecountry:' + String(name).toLowerCase().replace(/[^a-z]/g, '');
-  function buildGdeltQuery() {
-    const parts = [];
-    const q = news.query.trim();
-    if (q) parts.push(/\s/.test(q) && !/["()]|\bOR\b/.test(q) ? `"${q.replace(/"/g, '')}"` : q);
-    else parts.push(NEWS_TOPICS[news.topic]);
-    if (news.country) parts.push(gdeltCountry(news.country));
-    else if (news.region !== 'all') parts.push('(' + NEWS_REGIONS[news.region].split(' ').map((c) => 'sourcecountry:' + c).join(' OR ') + ')');
-    if (news.english) parts.push('sourcelang:english');
-    return parts.join(' ');
-  }
-  // GDELT asks for at most one request every 5 seconds
-  async function gdeltThrottle() {
-    const wait = news.lastCall + 5200 - Date.now();
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    news.lastCall = Date.now();
-  }
-  async function fetchGdelt() {
-    await gdeltThrottle();
-    const url = 'https://api.gdeltproject.org/api/v2/doc/doc?mode=artlist&format=json&sort=datedesc&maxrecords=120'
-      + `&timespan=${news.span}&query=${encodeURIComponent(buildGdeltQuery())}`;
-    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 15000);
-    const r = await fetch(url, { signal: ctl.signal }); clearTimeout(to);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const text = await r.text();
-    let data;
-    try { data = JSON.parse(text); }
-    catch { try { data = JSON.parse(text.replace(/[\u0000-\u001f]+/g, ' ')); } catch { throw new Error(text.slice(0, 120) || 'Unreadable response'); } }
-    const seen = new Set();
-    return (data.articles || []).map((a) => ({
-      title: String(a.title || '').replace(/\s+/g, ' ').trim(),
-      url: a.url, domain: a.domain || '', country: a.sourcecountry || '', cc: ccOf(a.sourcecountry),
-      lang: a.language || '', time: parseGdeltDate(a.seendate), image: /^https:\/\//.test(a.socialimage || '') ? a.socialimage : '',
-      desc: '', src: 'GDELT',
-    })).filter((a) => {
-      const k = a.title.toLowerCase().slice(0, 80);
-      if (!a.title || a.title.length < 12 || seen.has(k)) return false;
-      seen.add(k); return true;
-    });
-  }
-  const CC_NAME = { us: 'United States', gb: 'United Kingdom', in: 'India', au: 'Australia', fr: 'France', ru: 'Russia' };
-  async function fetchFallback() {
-    const cat = FALLBACK_CAT[news.topic] || 'general';
-    const ccs = news.country ? [ (ccOf(news.country) || 'us').toLowerCase() ].filter((c) => CC_NAME[c]) : FALLBACK_CC[news.region] || ['us'];
-    const res = await Promise.allSettled((ccs.length ? ccs : ['us']).map((cc) =>
-      fetch(`https://saurav.tech/NewsAPI/top-headlines/category/${cat}/${cc}.json`).then((r) => r.json()).then((d) => ({ cc, d }))));
-    const q = news.query.trim().toLowerCase();
-    return res.flatMap((r) => r.status === 'fulfilled' ? (r.value.d.articles || []).map((a) => ({
-      title: String(a.title || '').trim(), url: a.url, domain: (a.source && a.source.name) || '',
-      country: CC_NAME[r.value.cc], cc: r.value.cc.toUpperCase(), lang: 'English',
-      time: Date.parse(a.publishedAt) || 0, image: /^https:\/\//.test(a.urlToImage || '') ? a.urlToImage : '',
-      desc: a.description || '', src: 'NewsAPI mirror',
-    })) : []).filter((a) => a.title && (!q || (a.title + ' ' + a.desc).toLowerCase().includes(q)))
-      .sort((a, b) => b.time - a.time);
-  }
+  let countryNamer = null;
+  try { countryNamer = new Intl.DisplayNames(['en'], { type: 'region' }); } catch {}
+  const countryName = (cc) => { try { return (countryNamer && countryNamer.of(cc)) || cc; } catch { return cc; } };
 
   async function loadNews() {
     const id = ++news.reqId;
-    news.loading = true; news.error = ''; stopSpeaking();
-    renderNews();
-    let items = [], source = '';
-    try { items = await fetchGdelt(); source = 'GDELT'; }
-    catch (e) { news.error = String(e.message || e); }
-    if (id !== news.reqId) return;
-    if (!items.length) {
-      try { const fb = await fetchFallback(); if (fb.length) { items = fb; source = 'NewsAPI mirror'; } } catch {}
-    }
-    if (id !== news.reqId) return;
-    news.items = items; news.source = source; news.loading = false; news.open = null;
-    buildNewsPoints();
-    renderNews();
-    if (state.mode === 'news') updateCount();
+    news.loading = true; news.status = []; stopSpeaking();
+    news.cc = news.country ? ccOf(news.country) : null;
+    renderNews(); updateCount();
+    if (!NS) { news.loading = false; renderNews(); return; }
+    const apply = (raw, status, done) => {
+      if (id !== news.reqId) return;
+      const { fresh, earlier } = mergeNews(raw);
+      news.items = fresh; news.earlier = earlier; news.status = status;
+      if (done) { news.loading = false; try { if (fresh.length) localStorage.setItem('gw-news-last', JSON.stringify({ t: Date.now(), items: fresh.slice(0, 80) })); } catch {} }
+      if (news.open != null && news.open >= news.items.length) news.open = null;
+      buildNewsPoints();
+      const ul = $('#newsList'), top = ul.scrollTop; renderNews(); ul.scrollTop = top;
+      if (state.mode === 'news') updateCount();
+    };
+    await NS.fetchAll({
+      topic: news.topic, region: news.region, country: news.country, cc: news.cc, query: news.query,
+      span: news.span, english: news.english, keys: news.keys,
+    }, apply);
   }
+  // show the last headlines instantly while fresh ones load
+  try {
+    const last = JSON.parse(localStorage.getItem('gw-news-last') || 'null');
+    if (last && last.items && Date.now() - last.t < 12 * 3600e3) news.items = last.items;
+  } catch {}
 
   function buildNewsPoints() {
     const by = new Map();
@@ -1034,7 +1009,7 @@
   }
   function pickList() { return state.mode === 'news' ? news.points : state.stations; }
   function pickNewsCountry(p) {
-    news.country = p.country; news.query = ''; $('#newsSearch').value = '';
+    news.country = p.country || countryName(p.cc); news.query = ''; $('#newsSearch').value = '';
     globe.pointOfView({ lat: p.geo_lat, lng: p.geo_long, altitude: mqMobile.matches ? 2.2 : 1.8 }, 1200);
     ctrl.autoRotate = false; clearTimeout(resumeT);
     resumeT = setTimeout(() => (ctrl.autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches), 9000);
@@ -1062,6 +1037,7 @@
           <div><dt>Source</dt><dd>${esc(a.domain || '—')}</dd></div>
           <div><dt>Country</dt><dd>${a.cc ? flag(a.cc) + ' ' : ''}${esc(a.country || '—')}</dd></div>
           <div><dt>Language</dt><dd>${esc(a.lang || '—')}</dd></div>
+          <div><dt>Found via</dt><dd>${esc(a.src || '—')}${a.also > 1 ? ` · ${a.also} reports` : ''}</dd></div>
           <div><dt>Published</dt><dd>${a.time ? esc(new Date(a.time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + ' · ' + esc(newsAgo(a.time)) : '—'}</dd></div>
         </dl>
         <div class="n-actions">
@@ -1072,6 +1048,12 @@
       </div>` : ''}
     </li>`;
   }
+  const newsAll = () => news.items.concat(news.earlier || []);
+  function sourcesSummary() {
+    const st = news.status || [];
+    const ok = st.filter((x) => x.state === 'ok').length, busy = st.filter((x) => x.state === 'loading').length;
+    return { ok, busy, total: st.length };
+  }
   function renderNews() {
     const ul = $('#newsList');
     const f = $('#newsFilter');
@@ -1079,16 +1061,67 @@
     if (news.country) bits.push(`<button class="chip filter-chip" data-clear="country" aria-selected="true">${flag(ccOf(news.country))} ${esc(news.country)} ✕</button>`);
     if (news.query.trim()) bits.push(`<button class="chip filter-chip" data-clear="query" aria-selected="true">“${esc(news.query.trim())}” ✕</button>`);
     f.innerHTML = bits.join(''); f.hidden = !bits.length;
-    if (news.loading && !news.items.length) { ul.innerHTML = Array.from({ length: 6 }, () => '<li class="skeleton"></li>').join(''); return; }
+    const { ok, busy, total } = sourcesSummary();
+    $('#sourcesCount').textContent = total ? `${ok}/${total}` : '';
+    $('#sourcesBtn').classList.toggle('busy', busy > 0);
+    if (!$('#sourcesPanel').hidden) renderSources();
+    const all = newsAll();
+    if (!all.length && news.loading) { ul.innerHTML = Array.from({ length: 6 }, () => '<li class="skeleton"></li>').join(''); return; }
     const spanText = { '1h': 'last hour', '3h': 'last 3 hours', '24h': 'last 24 hours' }[news.span];
-    let head = `<li class="sec-head">${news.loading ? 'Refreshing…' : `${news.items.length} headlines · ${spanText}`}<span>${esc(news.source)}</span></li>`;
-    if (news.source === 'NewsAPI mirror') head += `<li class="sec-note">The live news index is busy, so these come from a backup source with summaries for a few countries. Check the dates.</li>`;
-    if (!news.items.length) {
-      ul.innerHTML = head + `<li class="sec-note">${news.error && /limit|one every/i.test(news.error) ? 'The news service asked us to slow down. Try again in a few seconds.' : 'No headlines found. Try a wider time window, another topic, or turn off “English only”.'}</li>`;
+    const head = `<li class="sec-head">${news.items.length} headlines · ${spanText}<span>${news.loading ? `loading ${busy} source${busy === 1 ? '' : 's'}…` : `${ok} source${ok === 1 ? '' : 's'}`}</span></li>`;
+    if (!all.length) {
+      const offline = navigator.onLine === false;
+      ul.innerHTML = head + `<li class="sec-note">${offline ? 'You’re offline. Headlines will load when you reconnect.'
+        : total && !ok ? 'None of the news sources could be reached from here. If you opened G-Wave inside a preview or an app, open it in your browser (Chrome, Safari, Edge). <button class="link-btn" data-act="sources">See sources</button>'
+        : 'No headlines match. Try a wider time window, another topic, or clear the search.'}</li>`;
       return;
     }
-    ul.innerHTML = head + news.items.map(newsCard).join('');
+    let html = head;
+    if (!news.items.length) html += `<li class="sec-note">Nothing new in the ${spanText}. Here are the latest earlier headlines.</li>`;
+    html += news.items.map((a, i) => newsCard(a, i)).join('');
+    if (news.earlier && news.earlier.length) {
+      html += `<li class="sec-head">Earlier<span>${news.earlier.length}</span></li>`;
+      html += news.earlier.map((a, k) => newsCard(a, news.items.length + k)).join('');
+    }
+    ul.innerHTML = html;
   }
+
+  // ---- sources panel: live status + optional free API keys ----
+  function renderSources() {
+    const st = news.status || [];
+    const icon = { ok: '✓', empty: '–', error: '✕', loading: '…' };
+    const rows = st.map((x) => `<li class="src-row ${x.state}">
+        <span class="src-dot" aria-hidden="true">${icon[x.state]}</span>
+        <span class="src-name"><b>${esc(x.name)}</b><small>${esc(x.kind)}${x.state === 'error' ? ' · ' + esc(x.error) : ''}</small></span>
+        <span class="src-n">${x.state === 'loading' ? 'loading' : x.state === 'error' ? 'unavailable' : `${x.count} · ${(x.ms / 1000).toFixed(1)}s`}</span>
+      </li>`).join('');
+    const keys = Object.entries(NS ? NS.KEYED : {}).map(([id, d]) => `<div class="key-row">
+        <label for="key-${id}"><b>${esc(d.label)}</b><small>Free: ${esc(d.free)} · <a href="${esc(d.signup)}" target="_blank" rel="noopener noreferrer">get a key ↗</a></small></label>
+        <input id="key-${id}" data-key="${id}" type="password" autocomplete="off" spellcheck="false" placeholder="Paste API key" value="${esc(news.keys[id] || '')}">
+      </div>`).join('');
+    $('#sourcesBody').innerHTML = `
+      <p class="menu-label">Sources for this view</p>
+      <ul class="src-list">${rows || '<li class="sec-note">Sources appear here when headlines load.</li>'}</ul>
+      <p class="menu-label">More sources with your own free key</p>
+      <p class="sec-note">Optional. Keys stay in this browser only and are sent only to that provider.</p>
+      ${keys}
+      <div class="n-actions"><button class="n-btn primary" id="saveKeys">Save keys & reload</button></div>`;
+  }
+  $('#sourcesBtn').addEventListener('click', () => {
+    const p = $('#sourcesPanel'); p.hidden = !p.hidden;
+    $('#sourcesBtn').setAttribute('aria-expanded', String(!p.hidden));
+    if (!p.hidden) renderSources();
+  });
+  $('#sourcesPanel').addEventListener('click', (e) => {
+    if (e.target.closest('#sourcesClose')) { $('#sourcesPanel').hidden = true; $('#sourcesBtn').setAttribute('aria-expanded', 'false'); }
+    if (e.target.closest('#saveKeys')) {
+      const keys = {};
+      $('#sourcesPanel').querySelectorAll('[data-key]').forEach((inp) => { const v = inp.value.trim(); if (v) keys[inp.dataset.key] = v; });
+      news.keys = keys; store.set('gw-news-keys', keys);
+      toast(Object.keys(keys).length ? `Saved ${Object.keys(keys).length} key${Object.keys(keys).length === 1 ? '' : 's'}` : 'Keys cleared', 1600);
+      loadNews();
+    }
+  });
 
   // ---- news audio (Web Speech API) ----
   const synth = window.speechSynthesis;
@@ -1129,7 +1162,7 @@
     $('#bulletinBtn').querySelector('span').textContent = 'Play bulletin';
   }
   function speakItem(i, then) {
-    const a = news.items[i]; if (!a) { stopSpeaking(); return; }
+    const a = newsAll()[i]; if (!a) { stopSpeaking(); return; }
     if (state.current && !audioPaused()) $('#playBtn').click(); // pause the radio while reading the news
     news.speaking = i; renderNews();
     const li = $(`#newsList [data-i="${i}"]`); if (li) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1144,12 +1177,12 @@
   }
   function startBulletin() {
     if (!synth) { toast('This browser has no built-in voices, so news audio isn’t available.'); return; }
-    if (!news.items.length) return;
+    if (!newsAll().length) return;
     synth.cancel();
     news.bulletin = true;
     $('#bulletinBtn').setAttribute('aria-pressed', 'true');
     $('#bulletinBtn').querySelector('span').textContent = 'Stop';
-    const n = Math.min(news.items.length, 20);
+    const n = Math.min(newsAll().length, 20);
     const where = news.country || (news.region === 'all' ? 'around the world' : news.region);
     chime();
     setTimeout(() => {
@@ -1168,8 +1201,9 @@
 
   // ---- news UI events ----
   $('#newsList').addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="sources"]')) { $('#sourcesBtn').click(); return; }
     const li = e.target.closest('.news-item'); if (!li) return;
-    const i = +li.dataset.i, a = news.items[i];
+    const i = +li.dataset.i, a = newsAll()[i];
     const act = e.target.closest('[data-act]');
     if (act && act.dataset.act === 'listen') {
       if (news.speaking === i) stopSpeaking();
@@ -1255,6 +1289,44 @@
   }
   $('#modeBtn').addEventListener('click', () => setMode(state.mode === 'news' ? 'radio' : 'news'));
   setMode(state.mode, true);
+
+  // ---------- layout menu ----------
+  const LAYOUT_LABEL = { auto: 'Auto', mobile: 'Mobile', tab: 'Tab' };
+  function renderLayoutButton() {
+    $('#layoutIcon').innerHTML = LAYOUT_ICONS[layoutPref];
+    $('#layoutBadge').textContent = layoutPref === 'auto' ? 'A' : '';
+    $('#layoutBadge').hidden = layoutPref !== 'auto';
+    $('#layoutBtn').setAttribute('aria-label', `Layout: ${LAYOUT_LABEL[layoutPref]}${layoutPref === 'auto' ? ` (now ${layoutNow === 'tab' ? 'Tab' : layoutNow === 'mobile' ? 'Mobile' : 'Desktop'})` : ''}`);
+    $('#layoutBtn').title = $('#layoutBtn').getAttribute('aria-label');
+    document.querySelectorAll('.layout-opt').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.layout === layoutPref)));
+  }
+  function relayout() {
+    const prev = layoutNow;
+    layoutNow = resolveLayout();
+    if (prev !== layoutNow) {
+      applyLayoutClass();
+      panel.classList.remove('collapsed', 'expanded');
+      if (layoutNow === 'mobile') panel.classList.add('collapsed');
+      globe.pointOfView({ altitude: layoutNow === 'mobile' ? 3.5 : layoutNow === 'tab' ? 2.9 : 2.6 }, 600);
+    }
+    sizeGlobe(); setPlayerH(); renderLayoutButton();
+  }
+  $('#layoutBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const m = $('#layoutMenu'); m.hidden = !m.hidden;
+    $('#layoutBtn').setAttribute('aria-expanded', String(!m.hidden));
+    $('#skinMenu').hidden = true;
+  });
+  $('#layoutMenu').addEventListener('click', (e) => {
+    const b = e.target.closest('.layout-opt'); if (!b) return;
+    layoutPref = b.dataset.layout; store.set('gw-layout', layoutPref);
+    $('#layoutMenu').hidden = true; $('#layoutBtn').setAttribute('aria-expanded', 'false');
+    relayout();
+    toast(layoutPref === 'auto' ? 'Layout follows your screen' : `${LAYOUT_LABEL[layoutPref]} layout`, 1600);
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.layout-wrap')) $('#layoutMenu').hidden = true; });
+  window.addEventListener('resize', () => { clearTimeout(relayout._t); relayout._t = setTimeout(relayout, 150); });
+  renderLayoutButton();
 
   // ---------- PWA ----------
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
