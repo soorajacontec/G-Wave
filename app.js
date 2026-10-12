@@ -61,6 +61,10 @@
     chinese: 'zh', mandarin: 'zh', cantonese: 'zh', japanese: 'ja', korean: 'ko', vietnamese: 'vi', thai: 'th',
     indonesian: 'id', malay: 'ms', tagalog: 'tl', filipino: 'tl', swahili: 'sw', catalan: 'ca', basque: 'eu',
     galician: 'gl', lithuanian: 'lt', latvian: 'lv', estonian: 'et', icelandic: 'is', afrikaans: 'af',
+    kannada: 'kn', gujarati: 'gu', punjabi: 'pa', panjabi: 'pa', sinhala: 'si', sinhalese: 'si', burmese: 'my', myanmar: 'my',
+    khmer: 'km', cambodian: 'km', lao: 'lo', mongolian: 'mn', kazakh: 'kk', uzbek: 'uz', pashto: 'ps', azerbaijani: 'az', azeri: 'az',
+    georgian: 'ka', armenian: 'hy', bangla: 'bn', nepali: 'ne', hindustani: 'hi', 'chinese mandarin': 'zh', taiwanese: 'zh',
+    tajik: 'tg', turkmen: 'tk', kyrgyz: 'ky', dhivehi: 'dv', assamese: 'as', odia: 'or', oriya: 'or', kurdish: 'ku', amharic: 'am',
   };
   const langCode = (s) => {
     const first = String(s.language || '').toLowerCase().split(/[,;/]/)[0].trim();
@@ -71,6 +75,7 @@
   // ---------- state ----------
   const state = {
     mode: store.get('gw-mode', 'radio'),
+    newsOnly: store.get('gw-news-only', false),
     stations: [],
     filtered: [],
     region: 'all',
@@ -253,7 +258,8 @@
     return [c[0] + Math.sin(a) * r * 0.6, c[1] + Math.cos(a) * r];
   }
 
-  const GOOD_CODECS = /^(MP3|AAC|AAC\+|OGG|OPUS)$/i;
+  const NEWS_RE = /news|talk|info|current|politic|public|noticia|nachricht|actualit|haber|berita|balita|khabar|samachar|akhbar|thời sự|tin tức|خبر|اخبار|أخبار|新闻|新聞|资讯|時事|뉴스|시사|ニュース|報道|ข่าว|समाचार|सूचना|সংবাদ|খবর|செய்தி|വാർത്ത|వార్త|ಸುದ್ದಿ|bbc|voa|rfi|\bdw\b|npr|akashvani|\bair\b|world service|radio free|sawa|farda|ozod|azadi|liberty|rthk|nhk|kbs|ytn|cna|bernama|rri\b|vov\b|trt/i;
+  const GOOD_CODECS = /^(MP3|AAC|AAC\+|OGG|OPUS|UNKNOWN|)$/i;
   const H3 = 3 * 3600 * 1000;
   const parseTime = (v) => {
     if (!v) return 0;
@@ -273,8 +279,8 @@
       const secure = url.startsWith('https://');
       // the app runs on HTTPS, so plain-HTTP streams are tried over HTTPS (many servers support both)
       if (!secure && location.protocol === 'https:') url = 'https://' + url.slice(7);
-      if (s.hls === 1 || /\.m3u8(\?|$)/i.test(url)) continue;
-      if (s.codec && !GOOD_CODECS.test(s.codec)) continue;
+      const isHls = s.hls === 1 || /\.m3u8(\?|$)/i.test(url); // HLS streams play through hls.js (common for Asian broadcasters)
+      if (s.codec && !GOOD_CODECS.test(s.codec) && !isHls) continue;
       const lat = +s.geo_lat, lng = +s.geo_long;
       let hasGeo = isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0) && s.geo_lat != null;
       let glat = lat, glng = lng;
@@ -299,12 +305,14 @@
         geo_lat: hasGeo ? +glat.toFixed(3) : null, geo_long: hasGeo ? +glng.toFixed(3) : null,
         secure,
         tags: (s.tags || '').toLowerCase(),
+        hls: isHls || undefined,
+        news: NEWS_RE.test((s.tags || '') + ' ' + (s.name || '')) || undefined,
         lastClick: parseTime(s.clicktimestamp_iso8601 || s.clicktimestamp),
         region: regionOf((s.countrycode || '').toUpperCase()),
       });
     }
     // secure streams first (most reliable), then by popularity
-    return out.sort((a, b) => (b.secure - a.secure) || (b.clickcount - a.clickcount));
+    return out.sort((a, b) => (b.secure - a.secure) || ((b.news ? 1 : 0) - (a.news ? 1 : 0)) || (b.clickcount - a.clickcount));
   }
 
   async function loadStations() {
@@ -353,6 +361,10 @@
         ...FEATURED.map((n) => `/json/stations/search?name=${encodeURIComponent(n)}&limit=12&${q}`),
         ...ASIA_CC.map((cc) => `/json/stations/search?countrycode=${cc}&tag=news&tagExact=false&limit=80&${q}`),
         ...['IN', 'PK', 'BD', 'PH', 'ID', 'JP', 'KR', 'CN', 'TR', 'SA', 'AE', 'IR'].map((cc) => `/json/stations/search?countrycode=${cc}&tag=talk&tagExact=false&limit=40&${q}`),
+        // the most-listened stations of every Asian & Middle Eastern country, any genre (many broadcasters aren't tagged "news")
+        ...ASIA_CC.map((cc) => `/json/stations/search?countrycode=${cc}&limit=${['IN', 'CN', 'JP', 'KR', 'ID', 'PH', 'PK', 'TR', 'IR', 'SA', 'AE', 'VN', 'TH', 'MY', 'BD'].includes(cc) ? 120 : 50}&${q}`),
+        // HLS streams (used by many Asian public broadcasters) now play too
+        ...['IN', 'CN', 'JP', 'KR', 'HK', 'TW', 'SG', 'MY', 'TH', 'VN', 'ID', 'PH', 'PK', 'BD', 'LK', 'NP', 'AE', 'SA', 'QA', 'IR', 'TR'].map((cc) => `/json/stations/search?countrycode=${cc}&is_https=true&codec=AAC&limit=40&${q}`),
       ];
       // polite: at most 6 requests at a time; show stations as soon as the first batches arrive
       const all = [];
@@ -406,6 +418,7 @@
   function applyFilter() {
     const q = state.query.trim().toLowerCase();
     state.filtered = state.stations.filter((s) => {
+      if (state.newsOnly && !s.news) return false;
       if (state.region === 'fav') { if (!state.favs.has(s.stationuuid)) return false; }
       else if (state.region === 'recent') { if (!(s.lastClick && Date.now() - s.lastClick < H3)) return false; }
       else if (state.region !== 'all' && s.region !== state.region) return false;
@@ -468,10 +481,15 @@
     if (e.key === 'Enter' && e.target.dataset.id) e.target.click();
   });
   $('#search').addEventListener('input', (e) => { state.query = e.target.value; applyFilter(); });
+  $('#newsOnly').setAttribute('aria-pressed', String(state.newsOnly));
+  $('#newsOnly').addEventListener('click', (e) => {
+    state.newsOnly = !state.newsOnly; store.set('gw-news-only', state.newsOnly);
+    e.currentTarget.setAttribute('aria-pressed', String(state.newsOnly)); applyFilter();
+  });
   $('#regions').addEventListener('click', (e) => {
-    const b = e.target.closest('.chip'); if (!b) return;
+    const b = e.target.closest('.chip[data-region]'); if (!b) return; // the News-only toggle has its own handler
     state.region = b.dataset.region;
-    document.querySelectorAll('#regions .chip').forEach((c) => c.setAttribute('aria-selected', String(c === b)));
+    document.querySelectorAll('#regions .chip[data-region]').forEach((c) => c.setAttribute('aria-selected', String(c === b)));
     applyFilter();
     $('#stations').scrollTop = 0;
   });
@@ -616,6 +634,7 @@
     document.body.classList.add('playing');
     if (mqMobile.matches && panel.classList.contains('expanded')) { panel.classList.remove('expanded'); panel.classList.add('collapsed'); }
     player.classList.add('loading');
+    destroyHls();
     [aCors, aPlain].forEach((a) => { a.pause(); a.removeAttribute('src'); a.load(); });
     clearCaptions();
     // Count the click with Radio Browser (helps their popularity ranking)
@@ -623,7 +642,7 @@
 
     // 1) try with CORS so we can read the audio for subtitles
     ensureAudioGraph();
-    corsOK = await tryPlay(aCors, s.url, token);
+    corsOK = s.hls ? await playHls(aCors, s.url, token) : await tryPlay(aCors, s.url, token);
     if (token !== playToken) return;
     if (corsOK) { active = aCors; }
     else {
@@ -641,6 +660,30 @@
     updateMediaSession(s);
     renderList(false);
     if (state.ccOn) startCaptions();
+  }
+
+  // HLS (.m3u8): hls.js feeds the stream into the page itself, so its audio is readable for subtitles.
+  // Safari plays HLS natively as a fallback.
+  let hlsInst = null;
+  function destroyHls() { if (hlsInst) { try { hlsInst.destroy(); } catch {} hlsInst = null; } }
+  function playHls(el, url, token) {
+    const Hls = window.Hls;
+    if (!Hls || !Hls.isSupported()) return tryPlay(el, url, token); // Safari / iOS: native HLS
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (ok) => { if (done) return; done = true; clearTimeout(to); el.removeEventListener('playing', onPlay); if (!ok) destroyHls(); resolve(ok); };
+      const onPlay = () => finish(true);
+      const to = setTimeout(() => finish(false), 15000);
+      destroyHls();
+      const h = new Hls({ enableWorker: true, lowLatencyMode: false, maxBufferLength: 20, manifestLoadingMaxRetry: 1, levelLoadingMaxRetry: 1, fragLoadingMaxRetry: 2 });
+      hlsInst = h;
+      h.on(Hls.Events.ERROR, (_, d) => { if (d && d.fatal) finish(false); });
+      h.on(Hls.Events.MANIFEST_PARSED, () => { const p = el.play(); if (p) p.catch(() => finish(false)); });
+      el.addEventListener('playing', onPlay);
+      h.loadSource(url);
+      h.attachMedia(el);
+      if (token !== playToken) finish(false);
+    });
   }
 
   function tryPlay(el, url, token) {
@@ -706,7 +749,8 @@
   let audioCtx = null, tap = null, worker = null, modelReady = false, modelLoading = false, busy = false;
   let buf = [], bufLen = 0, capturing = false, pending = null, device = 'wasm';
   const TARGET_SR = 16000, MAX_S = 12;
-  let chunkS = 4; // adapts to how fast this device translates
+  let chunkS = 6; // adapts to how fast this device translates (longer chunks = fewer cut sentences)
+  let asrQuality = store.get('gw-cc-quality', 'auto'); // auto | fast | accurate
 
   // Capture runs on the audio thread (AudioWorklet), so a busy page never drops audio;
   // blocks are queued and delivered in order. ScriptProcessor is only a fallback for old browsers.
@@ -803,8 +847,9 @@
     busy = false;
     // adapt chunk length: shorter when the device keeps up, longer when it falls behind
     const ratio = ms / 1000 / Math.max(1, secs);
-    if (ratio < 0.35) chunkS = Math.max(2.5, chunkS - 0.5);
-    else if (ratio > 0.85) chunkS = Math.min(8, chunkS + 1);
+    // measured: chunks under ~4 s cut too many sentences; 6–9 s is the accuracy sweet spot
+    if (ratio < 0.35) chunkS = Math.max(device === 'webgpu' ? 4 : 5.5, chunkS - 0.5);
+    else if (ratio > 0.85) chunkS = Math.min(10, chunkS + 1);
     if (pending && capturing) { const p = pending; pending = null; send(p); }
   }
 
@@ -853,8 +898,9 @@
       if (m.type === 'progress') {
         capStatus(`Downloading translator <span class="bar"><i style="width:${Math.round(m.pct)}%"></i></span> ${Math.round(m.pct)}%`);
       } else if (m.type === 'ready') {
-        modelReady = true; modelLoading = false; device = m.device || 'wasm';
-        chunkS = device === 'webgpu' ? 3 : 5;
+        modelReady = true; modelLoading = false; device = m.device || 'wasm'; asrLoaded = m.model || 'base';
+        chunkS = device === 'webgpu' ? 5 : 6.5;
+        renderCcMenu();
         capStatus('Listening… first words in a few seconds');
         if (corsOK && !active.paused) { buf = []; bufLen = 0; capturing = true; }
       } else if (m.type === 'partial') {
@@ -897,7 +943,7 @@
     if (!modelReady && !modelLoading) {
       modelLoading = true;
       capStatus('Preparing translator…');
-      worker.postMessage({ type: 'load', language: langCode(state.current) });
+      worker.postMessage({ type: 'load', language: langCode(state.current), quality: asrQuality });
     } else if (modelReady) {
       buf = []; bufLen = 0; pending = null; capturing = true;
       worker.postMessage({ type: 'prepare', language: langCode(state.current) });
@@ -921,6 +967,31 @@
     setCC(!state.ccOn);
   });
   $('#ccBtn').setAttribute('aria-pressed', String(state.ccOn));
+
+  // ---- translation accuracy menu (next to CC) ----
+  let asrLoaded = '';
+  const Q_LABEL = { auto: 'Auto', fast: 'Fast', accurate: 'Accurate' };
+  function renderCcMenu() {
+    document.querySelectorAll('.cc-opt').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.q === asrQuality)));
+    $('#ccNow').textContent = asrLoaded ? `Now using Whisper ${asrLoaded}${device === 'webgpu' ? ' on GPU' : ' on CPU'}` : 'Downloads when you turn on CC';
+  }
+  $('#ccMore').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const m = $('#ccMenu'); m.hidden = !m.hidden; $('#ccMore').setAttribute('aria-expanded', String(!m.hidden)); renderCcMenu();
+  });
+  $('#ccMenu').addEventListener('click', (e) => {
+    const b = e.target.closest('.cc-opt'); if (!b) return;
+    asrQuality = b.dataset.q; store.set('gw-cc-quality', asrQuality); renderCcMenu();
+    $('#ccMenu').hidden = true;
+    if (worker && (modelReady || modelLoading)) {
+      // reload the speech model at the new size
+      modelReady = false; modelLoading = true; capturing = false;
+      capStatus('Switching translator…');
+      worker.postMessage({ type: 'load', language: langCode(state.current), quality: asrQuality });
+    }
+    toast(asrQuality === 'accurate' ? 'Accurate: larger model (~240 MB), best on phones/PCs with GPU' : asrQuality === 'fast' ? 'Fast: smaller model (~80 MB), quicker but less accurate' : 'Auto: accurate on GPU, fast on CPU', 3000);
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.cc-wrap')) $('#ccMenu').hidden = true; });
 
   // ---------- News mode: world newspaper headlines + news audio ----------
   // Headlines come from many free sources at once (see news-sources.js), merged and de-duplicated,
@@ -1146,57 +1217,138 @@
       });
     } catch {}
   }
-  function say(text, langName, onend) {
-    const u = new SpeechSynthesisUtterance(text);
+  // ---- speech engine ----
+  // Device voices first (free, offline). Fixes for known browser problems:
+  //  · Chrome stops speaking after ~15 s → text is split into short sentences
+  //  · Chrome loses the "finished" event if the utterance object is garbage-collected → we keep references
+  //  · Chrome ignores speak() right after cancel() → short delay only when something was playing
+  //  · Safari/iOS only speaks when started by a tap → the first sentence always starts inside the tap
+  //  · Android in-app browsers / WebViews often have no voices → automatic switch to an online voice
+  const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  const tts = { mode: synth ? store.get('gw-tts-mode', 'device') : 'online', token: 0, keep: [], audio: new Audio(), watch: 0 };
+  tts.audio.preload = 'auto';
+  function chunkText(text, max = 170) {
+    const out = [];
+    const sentences = String(text).replace(/\s+/g, ' ').trim().split(/(?<=[.!?。！？؟।])\s+/);
+    for (let sen of sentences) {
+      while (sen.length > max) {
+        let cut = sen.lastIndexOf(', ', max); if (cut < 40) cut = sen.lastIndexOf(' ', max); if (cut < 40) cut = max;
+        out.push(sen.slice(0, cut + 1).trim()); sen = sen.slice(cut + 1).trim();
+      }
+      if (sen) out.push(sen);
+    }
+    return out;
+  }
+  // unlock audio playback inside the user's tap (needed by iOS for the online voice)
+  function primeAudio() {
+    try { tts.audio.src = SILENT_WAV; const p = tts.audio.play(); if (p) p.catch(() => {}); } catch {}
+    try { if (synth && synth.paused) synth.resume(); } catch {}
+  }
+  function deviceSay(part, langName, done, token) {
+    const u = new SpeechSynthesisUtterance(part);
     const { code, voice } = voiceFor(langName);
     if (voice) u.voice = voice;
     u.lang = voice ? voice.lang : code; u.rate = 1; u.pitch = 1;
-    u.onend = onend; u.onerror = onend;
+    let started = false, finished = false;
+    const finish = () => { if (finished) return; finished = true; clearTimeout(tts.watch); if (token === tts.token) done(); };
+    u.onstart = () => { started = true; };
+    u.onend = finish;
+    u.onerror = (e) => {
+      if (e && (e.error === 'interrupted' || e.error === 'canceled')) return;
+      if (!started && token === tts.token) { switchToOnline(); onlineSay(part, langName, done, token); finished = true; } else finish();
+    };
+    tts.keep.push(u); if (tts.keep.length > 30) tts.keep.shift();
     synth.speak(u);
+    // no sound within 3 s means this device has no working voice: use the online voice from now on
+    clearTimeout(tts.watch);
+    tts.watch = setTimeout(() => {
+      if (!started && !finished && token === tts.token) { finished = true; try { synth.cancel(); } catch {} switchToOnline(); onlineSay(part, langName, done, token); }
+    }, 3000);
+    // safety net: if the end event never arrives, move on after a generous time
+    setTimeout(() => { if (started && !finished && !synth.speaking) finish(); }, 1500 + part.length * 120);
+  }
+  function switchToOnline() {
+    if (tts.mode === 'online') return;
+    tts.mode = 'online'; store.set('gw-tts-mode', 'online');
+    toast('Using an online voice (this device has no built-in voice)', 3000);
+  }
+  // Free online text-to-speech, tried in order
+  const ONLINE_TTS = [
+    (t, lang) => `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(t)}`,
+    (t, lang) => (lang === 'en' ? `https://api.streamelements.com/kappa/v2/speech?voice=Brian&text=${encodeURIComponent(t)}` : null),
+  ];
+  function onlineSay(part, langName, done, token, k = 0) {
+    const lang = LANG[String(langName || '').toLowerCase()] || 'en';
+    const make = ONLINE_TTS[k];
+    if (!make) { if (token === tts.token) { toast('News audio isn’t available right now. Check your connection.', 3000); stopSpeaking(); } return; }
+    const url = make(part, lang);
+    if (!url) return onlineSay(part, langName, done, token, k + 1);
+    const a = tts.audio;
+    a.onended = () => { if (token === tts.token) done(); };
+    a.onerror = () => { if (token === tts.token) onlineSay(part, langName, done, token, k + 1); };
+    a.src = url;
+    const p = a.play(); if (p) p.catch(() => { if (token === tts.token) onlineSay(part, langName, done, token, k + 1); });
+  }
+  // speak text (any length) and call onend when finished; returns nothing
+  function say(text, langName, onend) {
+    const token = ++tts.token;
+    const parts = chunkText(text);
+    let i = 0;
+    const next = () => {
+      if (token !== tts.token) return;
+      if (i >= parts.length) { if (onend) onend(); return; }
+      const part = parts[i++];
+      if (tts.mode === 'device' && synth) deviceSay(part, langName, next, token);
+      else onlineSay(part, langName, next, token);
+    };
+    if (tts.mode === 'device' && synth && (synth.speaking || synth.pending)) { synth.cancel(); setTimeout(next, 120); }
+    else next();
   }
   function stopSpeaking() {
+    tts.token++;
     news.bulletin = false;
-    if (synth) synth.cancel();
-    if (news.speaking !== -1) { news.speaking = -1; renderNews(); }
+    clearTimeout(tts.watch);
+    try { if (synth && (synth.speaking || synth.pending)) synth.cancel(); } catch {}
+    try { tts.audio.pause(); tts.audio.removeAttribute('src'); } catch {}
+    if (news.speaking !== -1) { news.speaking = -1; globe.ringsData([]); renderNews(); }
     $('#bulletinBtn').setAttribute('aria-pressed', 'false');
     $('#bulletinBtn').querySelector('span').textContent = 'Play bulletin';
   }
   function speakItem(i, then) {
     const a = newsAll()[i]; if (!a) { stopSpeaking(); return; }
-    if (state.current && !audioPaused()) $('#playBtn').click(); // pause the radio while reading the news
+    if (state.current && !audioPaused()) { active.pause(); player.classList.add('paused'); stopCaptions(false); } // pause the radio while reading
     news.speaking = i; renderNews();
     const li = $(`#newsList [data-i="${i}"]`); if (li) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     if (CENTROID[a.cc]) globe.ringsData([{ geo_lat: CENTROID[a.cc][0], geo_long: CENTROID[a.cc][1] }]);
     const from = [a.domain, a.country].filter(Boolean).join(', ');
     const english = !a.lang || /english/i.test(a.lang);
-    const text = `${a.title}. ${a.desc ? a.desc + ' ' : ''}${english ? `From ${from}.` : ''}`;
+    const text = `${a.title}. ${a.desc && a.desc !== a.title ? a.desc + ' ' : ''}${english && from ? `From ${from}.` : ''}`;
     say(text, a.lang, () => {
       if (news.speaking !== i) return;
       if (then) then(); else { news.speaking = -1; globe.ringsData([]); renderNews(); }
     });
   }
   function startBulletin() {
-    if (!synth) { toast('This browser has no built-in voices, so news audio isn’t available.'); return; }
     if (!newsAll().length) return;
-    synth.cancel();
+    primeAudio();
     news.bulletin = true;
     $('#bulletinBtn').setAttribute('aria-pressed', 'true');
     $('#bulletinBtn').querySelector('span').textContent = 'Stop';
     const n = Math.min(newsAll().length, 20);
     const where = news.country || (news.region === 'all' ? 'around the world' : news.region);
-    chime();
-    setTimeout(() => {
-      say(`G-Wave news. ${n} headlines from ${where}.`, 'english', () => {
-        let i = 0;
-        const next = () => {
-          if (!news.bulletin) return;
-          if (i >= n) { say('That was the G-Wave bulletin.', 'english', stopSpeaking); return; }
-          const k = i++;
-          setTimeout(() => news.bulletin && (chime(), speakItem(k, next)), 450);
-        };
-        next();
-      });
-    }, 500);
+    if (state.current && !audioPaused()) { active.pause(); player.classList.add('paused'); stopCaptions(false); }
+    // the intro starts inside the tap, so Safari/iOS allow it
+    say(`G-Wave news. ${n} headlines from ${where}.`, 'english', () => {
+      let i = 0;
+      const next = () => {
+        if (!news.bulletin) return;
+        if (i >= n) { say('That was the G-Wave bulletin.', 'english', stopSpeaking); return; }
+        const k = i++;
+        chime();
+        setTimeout(() => { if (news.bulletin) speakItem(k, next); }, 450);
+      };
+      next();
+    });
   }
 
   // ---- news UI events ----
@@ -1207,8 +1359,7 @@
     const act = e.target.closest('[data-act]');
     if (act && act.dataset.act === 'listen') {
       if (news.speaking === i) stopSpeaking();
-      else if (!synth) toast('This browser has no built-in voices, so news audio isn’t available.');
-      else { stopSpeaking(); speakItem(i); }
+      else { primeAudio(); stopSpeaking(); speakItem(i); }
       return;
     }
     if (act && act.dataset.act === 'globe') {

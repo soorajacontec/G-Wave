@@ -6,6 +6,7 @@
 <title>G-Wave</title>
 <meta name="description" content="Live world news radio and newspaper headlines on a rotating globe, with live English translation and news audio.">
 <meta name="theme-color" content="#0b0e14">
+<meta name="referrer" content="no-referrer">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -104,6 +105,7 @@
     </label>
     <div class="chips" id="regions" role="tablist" aria-label="Region">
       <button class="chip" data-region="all" aria-selected="true">All</button>
+      <button class="chip toggle-chip" id="newsOnly" aria-pressed="false" title="Show only news & talk stations">News only</button>
       <button class="chip" data-region="recent" aria-selected="false">Last 3h</button>
       <button class="chip" data-region="fav" aria-selected="false">★ Saved</button>
       <button class="chip" data-region="Europe" aria-selected="false">Europe</button>
@@ -193,9 +195,21 @@
       <svg class="i-pause" viewBox="0 0 24 24"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>
       <span class="spinner" aria-hidden="true"></span>
     </button>
-    <button class="cc-btn" id="ccBtn" aria-pressed="false" title="English subtitles">
-      <span>CC</span><small>EN</small>
-    </button>
+    <div class="cc-wrap">
+      <button class="cc-btn" id="ccBtn" aria-pressed="false" title="English subtitles">
+        <span>CC</span><small>EN</small>
+      </button>
+      <button class="cc-more" id="ccMore" aria-haspopup="true" aria-expanded="false" aria-label="Translation accuracy" title="Translation accuracy">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg>
+      </button>
+      <div class="cc-menu" id="ccMenu" role="menu" hidden>
+        <p class="menu-label">Translation accuracy</p>
+        <button class="cc-opt layout-opt" role="menuitemradio" data-q="auto" aria-checked="true"><span><b>Auto</b><small>Accurate on GPU, Fast otherwise</small></span><svg class="tick" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+        <button class="cc-opt layout-opt" role="menuitemradio" data-q="fast" aria-checked="false"><span><b>Fast</b><small>Whisper base · ~80 MB · shorter delay</small></span><svg class="tick" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+        <button class="cc-opt layout-opt" role="menuitemradio" data-q="accurate" aria-checked="false"><span><b>Accurate</b><small>Whisper small · ~240 MB · much better for Asian languages</small></span><svg class="tick" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+        <p class="cc-now" id="ccNow"></p>
+      </div>
+    </div>
     <label class="volume" title="Volume">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
       <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Volume">
@@ -209,6 +223,7 @@
 <audio id="audioPlain" preload="none"></audio>
 
 <script src="vendor/globe.gl.min.js"></script>
+<script src="vendor/hls.light.min.js" defer></script>
 <script src="news-sources.js"></script>
 <script src="app.js"></script>
 </body>

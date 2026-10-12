@@ -550,3 +550,23 @@ mark { background: var(--accent); color: var(--accent-ink); border-radius: 3px; 
 :root.lay-mobile .panel { width: min(100%, 560px); left: 50%; right: auto; transform: translateX(-50%); }
 :root.lay-mobile .player { width: min(100%, 560px); left: 50%; transform: translateX(-50%); }
 :root.lay-mobile .captions { width: min(calc(100% - 2 * var(--gutter)), 560px); }
+
+/* ---------- CC accuracy menu ---------- */
+.cc-wrap { position: relative; display: inline-flex; }
+.cc-wrap .cc-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.cc-more {
+  height: 40px; width: 26px; display: grid; place-items: center; border: 1px solid var(--line); border-left: 0;
+  border-radius: 0 12px 12px 0; background: transparent; color: var(--muted);
+}
+.cc-more svg { width: 16px; height: 16px; }
+:root.lay-tab .cc-more { height: 44px; }
+.cc-menu {
+  position: absolute; bottom: 52px; right: 0; width: 270px; z-index: 30; padding: 8px; border-radius: var(--r-md);
+  background: var(--surface-solid); border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.cc-menu .menu-label { margin: 4px 6px 8px; }
+.cc-menu .layout-opt { grid-template-columns: 1fr auto; }
+.cc-now { margin: 6px 8px 2px; font: 400 11px/1.4 var(--f-mono); color: var(--muted); }
+
+.toggle-chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+.toggle-chip[aria-pressed="true"]::before { content: "✓ "; color: var(--accent); }
