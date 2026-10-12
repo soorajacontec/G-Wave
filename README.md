@@ -57,7 +57,7 @@ python3 -m http.server 8080
 
 ## App Live
 
-**[▶ Open the live app](https://soorajacontec.github.io/g-wave/)**
+**[▶ Open the live app](https://soorajacontec.github.io/G-Wave/)**
 
 ## Notes and limits
 
