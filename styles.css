@@ -570,3 +570,27 @@ mark { background: var(--accent); color: var(--accent-ink); border-radius: 3px; 
 
 .toggle-chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
 .toggle-chip[aria-pressed="true"]::before { content: "✓ "; color: var(--accent); }
+
+/* ---------- Genre chips ---------- */
+.genres { gap: 6px; }
+.genre-chip { display: inline-flex; align-items: center; gap: 6px; }
+.genre-chip svg { width: 15px; height: 15px; }
+.genre-chip small { font: 500 10.5px/1 var(--f-mono); opacity: .7; font-variant-numeric: tabular-nums; }
+.genre-chip small:empty { display: none; }
+.genre-chip[aria-selected="true"] small { opacity: .85; }
+
+/* Phone header: keep the name on one line and the buttons compact */
+.brand-name { white-space: nowrap; }
+:root.lay-mobile .topbar { gap: 8px; }
+:root.lay-mobile .top-actions { gap: 6px; }
+:root.lay-mobile .top-actions .icon-btn { width: 38px; height: 38px; border-radius: 11px; }
+:root.lay-mobile .mode-toggle { height: 38px; }
+:root.lay-mobile .mode-opt { padding: 0 8px; }
+:root.lay-mobile .brand-mark { width: 26px; height: 26px; }
+:root.lay-mobile .brand-name { font-size: 20px; }
+@media (max-width: 370px) {
+  :root.lay-mobile .brand-name { font-size: 17px; }
+  :root.lay-mobile .top-actions .icon-btn { width: 34px; height: 34px; }
+  :root.lay-mobile .mode-toggle { height: 34px; }
+  :root.lay-mobile .mode-opt { padding: 0 6px; }
+}

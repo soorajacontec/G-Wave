@@ -1,5 +1,5 @@
 // G-Wave service worker: app shell offline, station directory network-first, streams never cached.
-const VERSION = 'g-wave-v6';
+const VERSION = 'g-wave-v7';
 const SHELL = [
   './', 'index.html', 'styles.css', 'app.js', 'news-sources.js', 'asr-worker.js', 'manifest.webmanifest',
   'vendor/globe.gl.min.js', 'vendor/hls.light.min.js',

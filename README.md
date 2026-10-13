@@ -1,6 +1,6 @@
 # G-Wave
 
-**World news on a rotating 3D globe.** Tune in to live news radio from every continent with live English translation, or switch to News for newspaper headlines from around the world, read aloud.
+**World radio and news on a rotating 3D globe.** Tune in to news, music and entertainment radio from every continent, with live English translation for talk stations, or switch to News for newspaper headlines from around the world, read aloud.
 
 Installable as an app (PWA), works on phones and desktops, no accounts, no API keys, no server.
 
@@ -13,9 +13,10 @@ Installable as an app (PWA), works on phones and desktops, no accounts, no API k
 ## Features
 
 **Radio**
-- Thousands of news and talk stations plotted on the globe; tap a point or a list row to tune in
+- Thousands of stations plotted on the globe; tap a point or a list row to tune in
+- **Genres:** All, News, Music, Entertainment, Sports and Faith, with station counts; the globe shows only the chosen genre
+- **Music & entertainment:** the world's most-listened stations plus 80+ genres: pop, rock, jazz, classical, hip hop, Bollywood, Hindi, Tamil, Malayalam, Telugu, K-pop, J-pop, Arabic, Khaleeji, Turkish, Persian, OPM, Dangdut, comedy, kids, culture, sports, Quran, devotional and more, plus ~55 popular Asian and Gulf stations by name (Radio Mirchi, Red FM, Club FM, Radio Mango, Radio Suno, Virgin Radio Dubai, Rotana, J-WAVE, KBS Cool FM, Prambors, Wish 107.5…)
 - Strong Asia and Middle East coverage: news tags in 35+ languages, every Asian and Middle Eastern country searched individually (news stations plus each country's most-listened stations), ~150 major broadcasters by name, and **HLS streams** (used by many Asian public broadcasters) via hls.js
-- **News only** filter to hide music and entertainment stations
 - **Live English translation (CC)**, entirely on your device:
   1. Whisper transcribes the speech in its original language, word by word as it's heard
   2. An Opus-MT translator turns each line into English (dedicated models for ~25 languages, a multilingual model for the rest)
@@ -65,10 +66,16 @@ python3 -m http.server 8080
 # open http://localhost:8080
 ```
 
-## App Live
+## Publish on GitHub Pages
 
-**[▶ Open the live app](https://soorajacontec.github.io/G-Wave/)**
+This repo includes a workflow (`.github/workflows/pages.yml`) that publishes the site on every push to `main`.
 
+1. Push this repository to GitHub.
+2. In the repository, open **Settings → Pages**.
+3. Under **Build and deployment → Source**, choose **GitHub Actions**.
+4. Push any commit (or re-run the workflow from the **Actions** tab).
+
+Your app will be live at `https://<your-username>.github.io/g-wave/`. Open it on your phone and choose **Install** or **Add to Home Screen**.
 
 ## Notes and limits
 

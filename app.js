@@ -75,7 +75,7 @@
   // ---------- state ----------
   const state = {
     mode: store.get('gw-mode', 'radio'),
-    newsOnly: store.get('gw-news-only', false),
+    genre: store.get('gw-genre', store.get('gw-news-only', false) ? 'news' : 'all'), // all | news | music | ent | sports | faith
     stations: [],
     filtered: [],
     region: 'all',
@@ -212,7 +212,7 @@
     globe
       .globeImageUrl(isDark() ? 'img/earth-night.jpg' : 'img/earth-blue-marble.jpg')
       .atmosphereColor(isDark() ? accent : '#8fb4ff')
-      .pointColor((d) => (state.mode === 'news' ? hexToRgba(accent, 0.92) : state.current && d.stationuuid === state.current.stationuuid ? '#ffffff' : accent))
+      .pointColor((d) => (state.mode === 'news' ? hexToRgba(accent, 0.92) : state.current && d.stationuuid === state.current.stationuuid ? '#ffffff' : (state.genre === 'all' && d.genre !== 'news') ? hexToRgba(accent, 0.5) : accent))
       .ringColor(() => (t) => hexToRgba(accent, 1 - t));
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = isDark() ? '#0b0e14' : '#eef1f6';
@@ -259,6 +259,28 @@
   }
 
   const NEWS_RE = /news|talk|info|current|politic|public|noticia|nachricht|actualit|haber|berita|balita|khabar|samachar|akhbar|thời sự|tin tức|خبر|اخبار|أخبار|新闻|新聞|资讯|時事|뉴스|시사|ニュース|報道|ข่าว|समाचार|सूचना|সংবাদ|খবর|செய்தி|വാർത്ത|వార్త|ಸುದ್ದಿ|bbc|voa|rfi|\bdw\b|npr|akashvani|\bair\b|world service|radio free|sawa|farda|ozod|azadi|liberty|rthk|nhk|kbs|ytn|cna|bernama|rri\b|vov\b|trt/i;
+  // Genre of a station, from its tags and name. Order matters: faith and sports first, then news, then entertainment.
+  const FAITH_RE = /quran|qur'an|koran|islam|islamic|muslim|sunnah|hadith|nasheed|anasheed|christian|gospel|church|catholic|worship|praise|bible|sermon|devotional|bhajan|kirtan|gurbani|bhakti|\\bhindu\\b|vedic|sikh|buddhis|dharma|mantra|spiritual|religio|evangel|القرآن|قرآن|اسلام|إسلام|ভক্তি|भक्ति|भजन|ਗੁਰਬਾਣੀ/i;
+  const SPORTS_RE = /\bsports?\b|football|soccer|cricket|\bnba\b|\bnfl\b|baseball|hockey|racing|formula ?1|\bf1\b|espn|talksport|deportes|esporte|sportradio|کرکٹ|رياضة|رياضه|체육|スポーツ/i;
+  const ENT_RE = /comedy|humou?r|entertain|kids|children|child|family|story|stories|storytelling|audiobook|audio book|drama|theat(er|re)|radio play|culture|cultural|arts\b|literature|poetry|podcast|lifestyle|youth|community|tamasha|manoranjan|مسلسل|ترفيه|मनोरंजन|बच्चों|子供|어린이|动漫|드라마/i;
+  const NOISE_TAGS = /^(radio|fm|am|online|internet|stream|live|music|musica|música|musik|webradio|web radio|hd|24\/7|247|station|free|top|best|the|and|[a-z]{2}|\d+)$/i;
+  const NEWS_STRICT = /news|noticia|nachricht|actualit|haber|berita|balita|khabar|samachar|akhbar|thời sự|tin tức|politic|current affairs|خبر|اخبار|أخبار|新闻|新聞|뉴스|ニュース|ข่าว|समाचार|সংবাদ|খবর|செய்தி|വാർത്ത|వార్త|ಸುದ್ದಿ/i;
+  const MUSIC_RE = /pop|rock|hits|top ?40|dance|electro|jazz|classical|lounge|chill|hip ?hop|rnb|r&b|country|latin|reggae|oldies|\d0s|bollywood|filmi|k-?pop|j-?pop|c-?pop|anime|khaleeji|tarab|opm|dangdut|ghazal|qawwali|carnatic|instrumental|ambient|metal|blues|soul|funk|house|techno|trance|music|musik|música|musica/i;
+  function genreOf(tags, name) {
+    const t = (tags || '') + ' ' + (name || '');
+    if (FAITH_RE.test(t)) return 'faith';
+    if (SPORTS_RE.test(tags || '')) return 'sports';
+    if (NEWS_STRICT.test(t)) return 'news';      // clearly news
+    if (ENT_RE.test(tags || '')) return 'ent';   // "entertainment, talk" is entertainment
+    if (MUSIC_RE.test(tags || '')) return 'music'; // music tags beat a news broadcaster's name (KBS Cool FM, BBC Radio 1)
+    if (NEWS_RE.test(t)) return 'news';          // talk / info / public broadcasters
+    return 'music';
+  }
+  function tagLine(tags) {
+    return String(tags || '').split(',').map((x) => x.trim()).filter((x) => x && x.length < 22 && !NOISE_TAGS.test(x)).slice(0, 2).join(', ');
+  }
+  const GENRE_NAME = { news: 'News & talk', music: 'Music', ent: 'Entertainment', sports: 'Sports', faith: 'Faith' };
+
   const GOOD_CODECS = /^(MP3|AAC|AAC\+|OGG|OPUS|UNKNOWN|)$/i;
   const H3 = 3 * 3600 * 1000;
   const parseTime = (v) => {
@@ -306,13 +328,14 @@
         secure,
         tags: (s.tags || '').toLowerCase(),
         hls: isHls || undefined,
-        news: NEWS_RE.test((s.tags || '') + ' ' + (s.name || '')) || undefined,
+        genre: genreOf(s.tags, s.name),
+        tagline: tagLine(s.tags) || undefined,
         lastClick: parseTime(s.clicktimestamp_iso8601 || s.clicktimestamp),
         region: regionOf((s.countrycode || '').toUpperCase()),
       });
     }
     // secure streams first (most reliable), then by popularity
-    return out.sort((a, b) => (b.secure - a.secure) || ((b.news ? 1 : 0) - (a.news ? 1 : 0)) || (b.clickcount - a.clickcount));
+    return out.sort((a, b) => (b.secure - a.secure) || ((b.genre === 'news' ? 1 : 0) - (a.genre === 'news' ? 1 : 0)) || (b.clickcount - a.clickcount));
   }
 
   async function loadStations() {
@@ -355,6 +378,29 @@
       'Radio Farda', 'Iran International', 'IRIB', 'Radio Azadi', 'Ozodi', 'Radio Ozodlik', 'Kazakh Radio', 'Mongolian National Radio',
       'TRT Haber', 'Sözcü', 'Habertürk', 'NTV Radyo', 'Kan Reshet Bet', 'Galei Tzahal', 'Radio Monte Carlo', 'Radio Sawa Iraq',
     ];
+    // Music & entertainment: worldwide genres, plus Asian and Gulf favourites
+    const ENT_TAGS = [
+      ['pop', 400], ['hits', 300], ['top 40', 200], ['rock', 250], ['classic rock', 100], ['dance', 150], ['electronic', 150],
+      ['jazz', 150], ['classical', 200], ['lounge', 80], ['chillout', 100], ['ambient', 60], ['hip hop', 150], ['rnb', 80],
+      ['country', 100], ['latin', 120], ['reggae', 60], ['oldies', 120], ['80s', 100], ['90s', 80], ['instrumental', 60],
+      ['bollywood', 250], ['hindi', 200], ['tamil', 120], ['malayalam', 100], ['telugu', 100], ['kannada', 50], ['punjabi', 60],
+      ['marathi', 30], ['bengali', 50], ['urdu', 60], ['ghazal', 40], ['qawwali', 30], ['sufi', 40], ['carnatic', 30], ['hindustani', 30],
+      ['k-pop', 80], ['kpop', 60], ['j-pop', 60], ['anime', 50], ['c-pop', 40], ['mandopop', 30], ['cantopop', 30],
+      ['arabic', 200], ['khaleeji', 40], ['tarab', 30], ['arabic pop', 60], ['turkish', 100], ['persian', 80], ['kurdish', 30],
+      ['opm', 50], ['filipino', 60], ['indonesian', 60], ['dangdut', 40], ['malay', 50], ['thai', 50], ['luk thung', 20],
+      ['vietnamese', 50], ['nepali', 30], ['sinhala', 30], ['afghan', 20],
+      ['comedy', 80], ['kids', 80], ['children', 50], ['entertainment', 200], ['culture', 100], ['drama', 40], ['audiobook', 30],
+      ['soundtrack', 50], ['podcast', 40], ['sports', 200], ['football', 60], ['cricket', 40],
+      ['quran', 100], ['islamic', 80], ['nasheed', 30], ['christian', 100], ['gospel', 60], ['devotional', 80], ['bhajan', 40],
+    ];
+    const FEATURED_ENT = [
+      'Radio Mirchi', 'Red FM', 'Big FM', 'Radio City', 'Fever FM', 'Club FM', 'Radio Mango', 'Suryan FM', 'Hello FM', 'Radio Suno',
+      'Radio Olive', 'Radio Asia', 'Hit 96.7', 'City 1016', 'Virgin Radio Dubai', 'Arabian Radio Network', 'Al Arabiya 99', 'Rotana',
+      'Nogoum FM', 'Mix FM', 'MBC FM', 'Panorama FM', 'Sawt El Ghad', 'Radio Javan', 'Power Türk', 'Kral FM', 'Süper FM',
+      'J-WAVE', 'FM802', 'InterFM', 'KBS Cool FM', 'MBC FM4U', 'SBS Power FM', 'Hit FM', 'Metro Broadcast', 'Yes 933', 'Gold 905',
+      'Hitz', 'Era FM', 'Sinar', 'Prambors', 'Gen FM', 'Wish 107.5', 'Love Radio', 'Magic 89.9', 'Cool Fahrenheit', 'Radio Foorti',
+      'Radio Today', 'Kantipur FM', 'Hiru FM', 'Sirasa FM', 'Mast FM', 'City FM 89', 'Arman FM', 'Mega FM', 'Love FM',
+    ];
     try {
       const paths = [
         ...TAGS.map(([t, n]) => `/json/stations/search?tag=${encodeURIComponent(t)}&tagExact=false&limit=${n}&${q}`),
@@ -365,6 +411,10 @@
         ...ASIA_CC.map((cc) => `/json/stations/search?countrycode=${cc}&limit=${['IN', 'CN', 'JP', 'KR', 'ID', 'PH', 'PK', 'TR', 'IR', 'SA', 'AE', 'VN', 'TH', 'MY', 'BD'].includes(cc) ? 120 : 50}&${q}`),
         // HLS streams (used by many Asian public broadcasters) now play too
         ...['IN', 'CN', 'JP', 'KR', 'HK', 'TW', 'SG', 'MY', 'TH', 'VN', 'ID', 'PH', 'PK', 'BD', 'LK', 'NP', 'AE', 'SA', 'QA', 'IR', 'TR'].map((cc) => `/json/stations/search?countrycode=${cc}&is_https=true&codec=AAC&limit=40&${q}`),
+        // music & entertainment (after news, so news stations appear first)
+        '/json/stations/topclick/600?hidebroken=true', '/json/stations/topvote/300?hidebroken=true',
+        ...ENT_TAGS.map(([t, n]) => `/json/stations/search?tag=${encodeURIComponent(t)}&tagExact=false&limit=${n}&${q}`),
+        ...FEATURED_ENT.map((n) => `/json/stations/search?name=${encodeURIComponent(n)}&limit=8&${q}`),
       ];
       // polite: at most 6 requests at a time; show stations as soon as the first batches arrive
       const all = [];
@@ -399,9 +449,12 @@
   }
 
   function setStations(list, fromCache) {
+    // stations cached by an older version have no genre yet
+    for (const x of list) if (!x.genre) x.genre = genreOf(x.tags, x.name);
     state.stations = list;
     updateCount();
-    if (state.mode === 'radio') globe.pointsData(list);
+    if (state.mode === 'radio') globe.pointsData(globeStations());
+    renderGenreChips();
     applyFilter();
     // restore last station into the player (paused) so the app opens in a working state
     if (!state.current && !fromCache) {
@@ -418,7 +471,7 @@
   function applyFilter() {
     const q = state.query.trim().toLowerCase();
     state.filtered = state.stations.filter((s) => {
-      if (state.newsOnly && !s.news) return false;
+      if (state.genre !== 'all' && s.genre !== state.genre) return false;
       if (state.region === 'fav') { if (!state.favs.has(s.stationuuid)) return false; }
       else if (state.region === 'recent') { if (!(s.lastClick && Date.now() - s.lastClick < H3)) return false; }
       else if (state.region !== 'all' && s.region !== state.region) return false;
@@ -455,7 +508,7 @@
         <div class="art">${artHTML(s)}</div>
         <div style="min-width:0">
           <div class="s-name">${esc(s.name)}</div>
-          <div class="s-meta">${flag(s.countrycode)} ${esc(s.country)}${s.language ? ' · ' + esc(s.language.split(',')[0]) : ''}</div>
+          <div class="s-meta">${flag(s.countrycode)} ${esc(s.country)}${stationDetail(s)}</div>
         </div>
         <div class="s-side">${s.stationuuid === cur && !audioPaused() ? '<span class="eq"><i></i><i></i><i></i></span>' : sideLabel(s)}</div>
       </li>`).join('');
@@ -466,6 +519,11 @@
       shown += PAGE; const top = el.scrollTop; renderList(false); el.scrollTop = top;
     }
   });
+  function stationDetail(s) {
+    const lang = s.language ? esc(s.language.split(',')[0]) : '';
+    if (s.genre === 'news' || !s.tagline) return lang ? ' · ' + lang : '';
+    return ' · ' + esc(s.tagline);
+  }
   function sideLabel(s) {
     if (s.lastClick && Date.now() - s.lastClick < H3 && (state.region === 'recent' || state.query.trim()))
       return `<span class="ago">● ${ago(s.lastClick)}</span>`;
@@ -481,11 +539,26 @@
     if (e.key === 'Enter' && e.target.dataset.id) e.target.click();
   });
   $('#search').addEventListener('input', (e) => { state.query = e.target.value; applyFilter(); });
-  $('#newsOnly').setAttribute('aria-pressed', String(state.newsOnly));
-  $('#newsOnly').addEventListener('click', (e) => {
-    state.newsOnly = !state.newsOnly; store.set('gw-news-only', state.newsOnly);
-    e.currentTarget.setAttribute('aria-pressed', String(state.newsOnly)); applyFilter();
+  // genre chips
+  function renderGenreChips() {
+    const counts = {};
+    for (const x of state.stations) counts[x.genre] = (counts[x.genre] || 0) + 1;
+    document.querySelectorAll('#genres .chip').forEach((c) => {
+      const g = c.dataset.genre;
+      c.setAttribute('aria-selected', String(g === state.genre));
+      const n = g === 'all' ? state.stations.length : counts[g] || 0;
+      c.querySelector('small').textContent = n ? n.toLocaleString() : '';
+    });
+  }
+  $('#genres').addEventListener('click', (e) => {
+    const b = e.target.closest('.chip[data-genre]'); if (!b) return;
+    state.genre = b.dataset.genre; store.set('gw-genre', state.genre);
+    renderGenreChips(); applyFilter(); refreshGlobePoints();
+    $('#stations').scrollTop = 0;
   });
+  // the globe shows the chosen genre only
+  function globeStations() { return state.genre === 'all' ? state.stations : state.stations.filter((x) => x.genre === state.genre); }
+  function refreshGlobePoints() { if (state.mode === 'radio') { globe.pointsData(globeStations()); applyGlobeColors(); } }
   $('#regions').addEventListener('click', (e) => {
     const b = e.target.closest('.chip[data-region]'); if (!b) return; // the News-only toggle has its own handler
     state.region = b.dataset.region;
@@ -530,7 +603,7 @@
         <div class="art">${artHTML(s)}</div>
         <div style="min-width:0">
           <div class="s-name">${esc(s.name)}</div>
-          <div class="s-meta">${flag(s.countrycode)} ${esc(s.country)}${s.language ? ' · ' + esc(s.language.split(',')[0]) : ''}</div>
+          <div class="s-meta">${flag(s.countrycode)} ${esc(s.country)}${stationDetail(s)}</div>
         </div>
         <div class="s-side"><span class="ago">● ${ago(s.lastClick)}</span></div>
       </li>`).join('');
@@ -610,12 +683,12 @@
     state.current = s;
     player.hidden = false;
     $('#npName').textContent = s.name;
-    $('#npMeta').innerHTML = `<span class="live">● LIVE</span> · ${flag(s.countrycode)} ${esc(s.country)}${s.codec ? ' · ' + esc(s.codec) : ''}${s.bitrate ? ' ' + s.bitrate + ' kbps' : ''}`;
+    $('#npMeta').innerHTML = `<span class="live">● LIVE</span> · ${s.genre && s.genre !== 'news' ? esc(GENRE_NAME[s.genre]) + ' · ' : ''}${flag(s.countrycode)} ${esc(s.country)}${s.codec ? ' · ' + esc(s.codec) : ''}${s.bitrate ? ' ' + s.bitrate + ' kbps' : ''}`;
     const art = $('#npArt'); art.className = 'np-art art'; art.innerHTML = artHTML(s);
     $('#favBtn').setAttribute('aria-pressed', String(state.favs.has(s.stationuuid)));
     player.classList.add('paused');
     setPlayerH();
-    if (state.mode === 'radio') globe.pointsData(state.stations).ringsData(s.geo_lat != null ? [s] : []);
+    if (state.mode === 'radio') globe.pointsData(globeStations()).ringsData(s.geo_lat != null ? [s] : []);
     applyGlobeColors();
     if (focus) {
       ctrl.autoRotate = false;
@@ -1078,7 +1151,7 @@
     news.points = [...by.values()];
     if (state.mode === 'news') globe.pointsData(news.points).ringsData([]);
   }
-  function pickList() { return state.mode === 'news' ? news.points : state.stations; }
+  function pickList() { return state.mode === 'news' ? news.points : globeStations(); }
   function pickNewsCountry(p) {
     news.country = p.country || countryName(p.cc); news.query = ''; $('#newsSearch').value = '';
     globe.pointOfView({ lat: p.geo_lat, lng: p.geo_long, altitude: mqMobile.matches ? 2.2 : 1.8 }, 1200);
@@ -1399,7 +1472,7 @@
 
   // ---------- Radio / News mode switch ----------
   const HERO = {
-    radio: ['World news radio, live', 'Spin the planet.<br>Hear the headlines.', 'Tap any glowing point to tune in to a news station. Turn on CC for live English translation, then search any topic to see what was said in the last 3 hours.'],
+    radio: ['World radio, live', 'Spin the planet.<br>Tune in anywhere.', 'News, music and entertainment from every country. Tap a glowing point to listen, pick a genre below, and turn on CC for live English translation of talk stations.'],
     news: ['World newspapers, live', 'Every front page.<br>One planet.', 'Headlines from news sites in every country, updated every 15 minutes. Tap a country to filter, open a story for details, or play a spoken bulletin.'],
   };
   function updateCount() {
@@ -1432,7 +1505,7 @@
       globe
         .pointAltitude((d) => (state.current && d.stationuuid === state.current.stationuuid ? 0.03 : 0.012))
         .pointRadius((d) => (state.current && d.stationuuid === state.current.stationuuid ? 0.55 : (state.stations.length > 1500 ? 0.2 : 0.34)))
-        .pointsData(state.stations).ringsData(state.current && state.current.geo_lat != null ? [state.current] : []);
+        .pointsData(globeStations()).ringsData(state.current && state.current.geo_lat != null ? [state.current] : []);
     }
     applyGlobeColors();
     updateCount();
