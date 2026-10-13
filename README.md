@@ -66,16 +66,9 @@ python3 -m http.server 8080
 # open http://localhost:8080
 ```
 
-## Publish on GitHub Pages
+## App Live
 
-This repo includes a workflow (`.github/workflows/pages.yml`) that publishes the site on every push to `main`.
-
-1. Push this repository to GitHub.
-2. In the repository, open **Settings → Pages**.
-3. Under **Build and deployment → Source**, choose **GitHub Actions**.
-4. Push any commit (or re-run the workflow from the **Actions** tab).
-
-Your app will be live at `https://<your-username>.github.io/g-wave/`. Open it on your phone and choose **Install** or **Add to Home Screen**.
+**[▶ Open the live app](https://soorajacontec.github.io/G-Wave/)**
 
 ## Notes and limits
 
