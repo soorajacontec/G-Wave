@@ -6,6 +6,8 @@
 <title>G-Wave</title>
 <meta name="description" content="Live world news radio and newspaper headlines on a rotating globe, with live English translation and news audio.">
 <meta name="theme-color" content="#0b0e14">
+<meta name="referrer" content="no-referrer">
+<meta name="author" content="SSK-BLUM">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -20,6 +22,10 @@
   try {
     var t = localStorage.getItem('gr-theme'); if (t) document.documentElement.dataset.theme = t;
     var s = localStorage.getItem('gr-skin'); if (s) document.documentElement.dataset.skin = s;
+    var lp = JSON.parse(localStorage.getItem('gw-layout') || '"auto"');
+    var w = window.innerWidth, coarse = window.matchMedia('(pointer: coarse)').matches;
+    var lay = lp === 'mobile' ? 'mobile' : lp === 'tab' ? 'tab' : (w <= 760 ? 'mobile' : (w <= 1180 && coarse) ? 'tab' : 'desktop');
+    document.documentElement.classList.add('lay-' + lay);
   } catch (e) {}
 </script>
 </head>
@@ -28,7 +34,7 @@
 <div id="globe" class="globe" aria-label="Rotating globe of news radio stations"></div>
 
 <header class="topbar">
-  <a class="brand" href="./" aria-label="G-Wave home">
+  <button class="brand" id="brandBtn" aria-haspopup="dialog" aria-label="About G-Wave" title="About G-Wave">
     <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
       <circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
       <ellipse cx="16" cy="16" rx="4" ry="9" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".75"/>
@@ -36,12 +42,24 @@
       <path d="M26.5 8.5a13 13 0 0 1 0 15M5.5 8.5a13 13 0 0 0 0 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
     </svg>
     <span class="brand-name">G-Wave</span>
-  </a>
+  </button>
   <div class="onair" id="onairCount"><span class="dot"></span><span id="countText">Tuning in…</span></div>
   <div class="top-actions">
     <button class="icon-btn" id="installBtn" hidden aria-label="Install app" title="Install app">
       <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 19h16" /></svg>
     </button>
+    <button class="icon-btn help-btn" id="helpBtn" aria-haspopup="dialog" aria-label="How to use G-Wave" title="How to use">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg>
+    </button>
+    <div class="layout-wrap">
+      <button class="icon-btn" id="layoutBtn" aria-haspopup="true" aria-expanded="false" aria-label="Layout: Auto" title="Layout">
+        <span id="layoutIcon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="13" height="10" rx="1.5"/><rect x="15" y="9" width="6.5" height="11" rx="1.5"/><path d="M6 19h6"/></svg></span><span class="lay-badge" id="layoutBadge">A</span>
+      </button>
+      <div class="layout-menu" id="layoutMenu" role="menu" hidden>
+        <p class="menu-label">Optimise layout for</p>
+        <button class="layout-opt" role="menuitemradio" aria-checked="false" data-layout="auto"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="13" height="10" rx="1.5"/><rect x="15" y="9" width="6.5" height="11" rx="1.5"/><path d="M6 19h6"/></svg><span><b>Auto</b><small>Fits the screen you're on</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button><button class="layout-opt" role="menuitemradio" aria-checked="false" data-layout="mobile"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg><span><b>Mobile</b><small>One-hand layout, bottom sheet</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button><button class="layout-opt" role="menuitemradio" aria-checked="false" data-layout="tab"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3" width="17" height="18" rx="2.5"/><path d="M11 18h2"/></svg><span><b>Tab</b><small>Bigger touch targets, side panel</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+      </div>
+    </div>
     <button class="mode-toggle" id="modeBtn" role="switch" aria-checked="false" aria-label="News mode" title="Switch between Radio and News">
       <span class="mode-thumb" aria-hidden="true"></span>
       <span class="mode-opt opt-radio">
@@ -64,6 +82,12 @@
         <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.9-.6-1.3-.6-2.1 0-.9.7-1.6 1.6-1.6H17a4 4 0 0 0 4-4C21 6.9 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10" cy="7" r="1.2"/><circle cx="15" cy="7" r="1.2"/></svg>
       </button>
       <div class="skin-menu" id="skinMenu" role="menu" hidden>
+        <p class="menu-label">Appearance</p>
+        <div class="seg" id="themeSeg" role="radiogroup" aria-label="Appearance">
+          <button role="radio" data-theme-opt="auto" aria-checked="false">Auto</button>
+          <button role="radio" data-theme-opt="light" aria-checked="false">Light</button>
+          <button role="radio" data-theme-opt="dark" aria-checked="false">Dark</button>
+        </div>
         <p class="menu-label">Colour skin</p>
         <div class="swatches" id="swatches"></div>
       </div>
@@ -87,11 +111,24 @@
   <div class="panel-head">
     <label class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
-      <input id="search" type="search" placeholder="Search a news topic, station or country" autocomplete="off">
+      <input id="search" type="search" placeholder="Search station, genre, topic or country" autocomplete="off">
     </label>
+    <div class="chips genres" id="genres" role="tablist" aria-label="Genre">
+      <button class="chip genre-chip" data-genre="all" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-6 3 12 3-9 2 3h3"/></svg>All<small></small></button>
+      <button class="chip genre-chip" data-genre="news" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h13v13a1.5 1.5 0 0 0 1.5 1.5H6A2 2 0 0 1 4 18Z"/><path d="M17 9h2.5v9.5a1.5 1.5 0 0 1-3 0M7 9h7M7 12.5h7M7 16h4.5"/></svg>News<small></small></button>
+      <button class="chip genre-chip" data-genre="music" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Music<small></small></button>
+      <button class="chip genre-chip" data-genre="ent" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4z"/><path d="m8 3 4 4 4-4M9 12.5c1.5 2 4.5 2 6 0"/></svg>Entertainment<small></small></button>
+      <button class="chip genre-chip" data-genre="sports" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m12 7.5 4 3-1.5 4.5h-5L8 10.5Z"/></svg>Sports<small></small></button>
+      <button class="chip genre-chip" data-genre="faith" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-2 3-5 4.5-5 9a5 5 0 0 0 10 0c0-4.5-3-6-5-9Z"/></svg>Faith<small></small></button>
+    </div>
     <div class="chips" id="regions" role="tablist" aria-label="Region">
+      <label class="lang-wrap" id="langWrap" title="Language">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h9M8.5 3v2c0 4-2 7-5 8.5M6 9c1 2.5 3 4 6 5"/><path d="m12 20 4-9 4 9M13.5 17h5"/></svg>
+        <span class="sr-only">Language</span>
+        <select id="langSel"><option value="any">Any language</option></select>
+      </label>
       <button class="chip" data-region="all" aria-selected="true">All</button>
-      <button class="chip" data-region="recent" aria-selected="false">Last 3h</button>
+<button class="chip" data-region="recent" aria-selected="false">Last 3h</button>
       <button class="chip" data-region="fav" aria-selected="false">★ Saved</button>
       <button class="chip" data-region="Europe" aria-selected="false">Europe</button>
       <button class="chip" data-region="Americas" aria-selected="false">Americas</button>
@@ -138,6 +175,10 @@
           </select>
         </label>
         <button class="chip" id="newsEnglish" aria-pressed="true">English only</button>
+        <button class="chip sources-btn" id="sourcesBtn" aria-expanded="false" aria-controls="sourcesPanel" title="News sources">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/></svg>
+          Sources <span id="sourcesCount"></span>
+        </button>
         <button class="bulletin-btn" id="bulletinBtn" aria-pressed="false">
           <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5Z"/></svg>
           <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
@@ -145,6 +186,10 @@
         </button>
       </div>
       <div class="news-filter" id="newsFilter" hidden></div>
+    </div>
+    <div class="sources-panel" id="sourcesPanel" hidden>
+      <div class="sources-top"><b>News sources</b><button class="icon-btn" id="sourcesClose" aria-label="Close sources">✕</button></div>
+      <div class="sources-body" id="sourcesBody"></div>
     </div>
     <ul class="stations news-list" id="newsList" aria-live="polite"></ul>
   </div>
@@ -172,9 +217,21 @@
       <svg class="i-pause" viewBox="0 0 24 24"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>
       <span class="spinner" aria-hidden="true"></span>
     </button>
-    <button class="cc-btn" id="ccBtn" aria-pressed="false" title="English subtitles">
-      <span>CC</span><small>EN</small>
-    </button>
+    <div class="cc-wrap">
+      <button class="cc-btn" id="ccBtn" aria-pressed="false" title="English subtitles">
+        <span>CC</span><small>EN</small>
+      </button>
+      <button class="cc-more" id="ccMore" aria-haspopup="true" aria-expanded="false" aria-label="Translation accuracy" title="Translation accuracy">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg>
+      </button>
+      <div class="cc-menu" id="ccMenu" role="menu" hidden>
+        <p class="menu-label">Translation accuracy</p>
+        <button class="cc-opt layout-opt" role="menuitemradio" data-q="auto" aria-checked="true"><span><b>Auto</b><small>Accurate on GPU, Fast otherwise</small></span><svg class="tick" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+        <button class="cc-opt layout-opt" role="menuitemradio" data-q="fast" aria-checked="false"><span><b>Fast</b><small>Whisper base · ~80 MB · shorter delay</small></span><svg class="tick" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+        <button class="cc-opt layout-opt" role="menuitemradio" data-q="accurate" aria-checked="false"><span><b>Accurate</b><small>Whisper small · ~240 MB · much better for Asian languages</small></span><svg class="tick" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+        <p class="cc-now" id="ccNow"></p>
+      </div>
+    </div>
     <label class="volume" title="Volume">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
       <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Volume">
@@ -184,10 +241,81 @@
 
 <div class="toast" id="toast" role="status" hidden></div>
 
+<!-- How to use -->
+<div class="modal" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+  <div class="modal-card help-card">
+    <div class="modal-head">
+      <div>
+        <p class="eyebrow">Guide</p>
+        <h2 id="helpTitle">How to use G-Wave</h2>
+      </div>
+      <button class="icon-btn" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="help-intro">
+      <p>Every button explained. Tap <b>Show me</b> on any item to see where it is in the app.</p>
+      <button class="n-btn primary" id="tourBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5Z" fill="currentColor" stroke="none"/></svg>
+        Take the 1-minute tour
+      </button>
+    </div>
+    <div class="chips help-tabs" id="helpTabs" role="tablist" aria-label="Guide sections"></div>
+    <div class="help-body" id="helpBody"></div>
+  </div>
+</div>
+
+<!-- About -->
+<div class="modal" id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" hidden>
+  <div class="modal-card about-card">
+    <button class="icon-btn about-close" data-close aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div class="about-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+        <ellipse cx="16" cy="16" rx="4" ry="9" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".75"/>
+        <path d="M7 16h18" stroke="currentColor" stroke-width="1.4" opacity=".75"/>
+        <path d="M26.5 8.5a13 13 0 0 1 0 15M5.5 8.5a13 13 0 0 0 0 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h2 id="aboutTitle">G-Wave</h2>
+    <p class="about-tag">World radio &amp; news on a living globe</p>
+    <div class="about-credit">
+      <span>Created by</span>
+      <strong>SSK-BLUM</strong>
+    </div>
+    <dl class="about-facts" id="aboutFacts"></dl>
+    <p class="about-note">Free and ad-free. No account, no tracking. Your saved stations and settings stay on this device.</p>
+    <div class="about-actions">
+      <button class="n-btn primary" id="aboutHelp">How to use</button>
+      <button class="n-btn" data-close>Close</button>
+    </div>
+    <p class="about-small">Radio directory: Radio Browser · Headlines: GDELT, publisher feeds &amp; more · Translation: Whisper &amp; Opus-MT, on your device</p>
+  </div>
+</div>
+
+<!-- Guided spotlight -->
+<div class="tour" id="tour" hidden>
+  <div class="tour-hole" id="tourHole"></div>
+  <div class="tour-tip" id="tourTip" role="dialog" aria-live="polite">
+    <p class="tour-step" id="tourStep"></p>
+    <h3 id="tourTitle"></h3>
+    <p id="tourText"></p>
+    <div class="tour-actions">
+      <button class="n-btn" id="tourBack">Back</button>
+      <button class="n-btn primary" id="tourNext">Next</button>
+      <button class="tour-x" id="tourClose" aria-label="Close guide">✕</button>
+    </div>
+  </div>
+</div>
+
 <audio id="audioCors" crossorigin="anonymous" preload="none"></audio>
 <audio id="audioPlain" preload="none"></audio>
 
 <script src="vendor/globe.gl.min.js"></script>
+<script src="vendor/hls.light.min.js" defer></script>
+<script src="news-sources.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
