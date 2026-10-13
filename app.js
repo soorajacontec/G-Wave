@@ -21,26 +21,6 @@
     return t ? t === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
   };
 
-  // ---------- layout: Auto / Mobile / Tab ----------
-  const LAYOUT_ICONS = {"auto": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"2.5\" y=\"5\" width=\"13\" height=\"10\" rx=\"1.5\"/><rect x=\"15\" y=\"9\" width=\"6.5\" height=\"11\" rx=\"1.5\"/><path d=\"M6 19h6\"/></svg>", "mobile": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"7\" y=\"2.5\" width=\"10\" height=\"19\" rx=\"2.5\"/><path d=\"M11 18.5h2\"/></svg>", "tab": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><rect x=\"3.5\" y=\"3\" width=\"17\" height=\"18\" rx=\"2.5\"/><path d=\"M11 18h2\"/></svg>"};
-  let layoutPref = store.get('gw-layout', 'auto');
-  const coarse = matchMedia('(pointer: coarse)');
-  function resolveLayout() {
-    const w = window.innerWidth;
-    if (layoutPref === 'mobile') return 'mobile';
-    if (layoutPref === 'tab') return 'tab';
-    return w <= 760 ? 'mobile' : (w <= 1180 && coarse.matches) ? 'tab' : 'desktop';
-  }
-  let layoutNow = resolveLayout();
-  // drop-in for the old phone-width media query used throughout the app
-  const mqMobile = { get matches() { return layoutNow === 'mobile'; } };
-  function applyLayoutClass() {
-    const root = document.documentElement;
-    root.classList.remove('lay-mobile', 'lay-tab', 'lay-desktop');
-    root.classList.add('lay-' + layoutNow);
-  }
-  applyLayoutClass();
-
   // ---------- regions ----------
   const REGION = {};
   const addRegion = (name, codes) => codes.split(' ').forEach((c) => (REGION[c] = name));
@@ -61,10 +41,6 @@
     chinese: 'zh', mandarin: 'zh', cantonese: 'zh', japanese: 'ja', korean: 'ko', vietnamese: 'vi', thai: 'th',
     indonesian: 'id', malay: 'ms', tagalog: 'tl', filipino: 'tl', swahili: 'sw', catalan: 'ca', basque: 'eu',
     galician: 'gl', lithuanian: 'lt', latvian: 'lv', estonian: 'et', icelandic: 'is', afrikaans: 'af',
-    kannada: 'kn', gujarati: 'gu', punjabi: 'pa', panjabi: 'pa', sinhala: 'si', sinhalese: 'si', burmese: 'my', myanmar: 'my',
-    khmer: 'km', cambodian: 'km', lao: 'lo', mongolian: 'mn', kazakh: 'kk', uzbek: 'uz', pashto: 'ps', azerbaijani: 'az', azeri: 'az',
-    georgian: 'ka', armenian: 'hy', bangla: 'bn', nepali: 'ne', hindustani: 'hi', 'chinese mandarin': 'zh', taiwanese: 'zh',
-    tajik: 'tg', turkmen: 'tk', kyrgyz: 'ky', dhivehi: 'dv', assamese: 'as', odia: 'or', oriya: 'or', kurdish: 'ku', amharic: 'am',
   };
   const langCode = (s) => {
     const first = String(s.language || '').toLowerCase().split(/[,;/]/)[0].trim();
@@ -75,7 +51,6 @@
   // ---------- state ----------
   const state = {
     mode: store.get('gw-mode', 'radio'),
-    genre: store.get('gw-genre', store.get('gw-news-only', false) ? 'news' : 'all'), // all | news | music | ent | sports | faith
     stations: [],
     filtered: [],
     region: 'all',
@@ -143,7 +118,7 @@
   ctrl.autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches;
   ctrl.autoRotateSpeed = 0.45;
   ctrl.enableDamping = true;
-  globe.pointOfView({ lat: 22, lng: 40, altitude: layoutNow === 'mobile' ? 3.5 : layoutNow === 'tab' ? 2.9 : 2.6 });
+  globe.pointOfView({ lat: 22, lng: 40, altitude: window.innerWidth < 760 ? 3.5 : 2.6 });
 
   // Picking: points are merged into one mesh for speed, so find the nearest station ourselves
   const tip = document.createElement('div'); tip.className = 'globe-tip'; tip.hidden = true; document.body.appendChild(tip);
@@ -197,9 +172,8 @@
     const w = window.innerWidth, h = window.innerHeight;
     globe.width(w).height(h);
     // keep the globe centred in the free space: left of the panel on desktop, between header and sheet on phones
-    if (layoutNow === 'mobile') globe.globeOffset([0, h * 0.02]);
-    else if (layoutNow === 'tab') globe.globeOffset([-(360 + 40) / 2 + 40, 20]);
-    else globe.globeOffset([-Math.min(410, w * 0.32) / 2 + 90, 40]);
+    if (w > 760) globe.globeOffset([-Math.min(410, w * 0.32) / 2 + 90, 40]);
+    else globe.globeOffset([0, h * 0.02]);
   }
   window.addEventListener('resize', sizeGlobe); sizeGlobe();
 
@@ -212,7 +186,7 @@
     globe
       .globeImageUrl(isDark() ? 'img/earth-night.jpg' : 'img/earth-blue-marble.jpg')
       .atmosphereColor(isDark() ? accent : '#8fb4ff')
-      .pointColor((d) => (state.mode === 'news' ? hexToRgba(accent, 0.92) : state.current && d.stationuuid === state.current.stationuuid ? '#ffffff' : (state.genre === 'all' && d.genre !== 'news') ? hexToRgba(accent, 0.5) : accent))
+      .pointColor((d) => (state.mode === 'news' ? hexToRgba(accent, 0.92) : state.current && d.stationuuid === state.current.stationuuid ? '#ffffff' : accent))
       .ringColor(() => (t) => hexToRgba(accent, 1 - t));
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = isDark() ? '#0b0e14' : '#eef1f6';
@@ -258,30 +232,7 @@
     return [c[0] + Math.sin(a) * r * 0.6, c[1] + Math.cos(a) * r];
   }
 
-  const NEWS_RE = /news|talk|info|current|politic|public|noticia|nachricht|actualit|haber|berita|balita|khabar|samachar|akhbar|thời sự|tin tức|خبر|اخبار|أخبار|新闻|新聞|资讯|時事|뉴스|시사|ニュース|報道|ข่าว|समाचार|सूचना|সংবাদ|খবর|செய்தி|വാർത്ത|వార్త|ಸುದ್ದಿ|bbc|voa|rfi|\bdw\b|npr|akashvani|\bair\b|world service|radio free|sawa|farda|ozod|azadi|liberty|rthk|nhk|kbs|ytn|cna|bernama|rri\b|vov\b|trt/i;
-  // Genre of a station, from its tags and name. Order matters: faith and sports first, then news, then entertainment.
-  const FAITH_RE = /quran|qur'an|koran|islam|islamic|muslim|sunnah|hadith|nasheed|anasheed|christian|gospel|church|catholic|worship|praise|bible|sermon|devotional|bhajan|kirtan|gurbani|bhakti|\\bhindu\\b|vedic|sikh|buddhis|dharma|mantra|spiritual|religio|evangel|القرآن|قرآن|اسلام|إسلام|ভক্তি|भक्ति|भजन|ਗੁਰਬਾਣੀ/i;
-  const SPORTS_RE = /\bsports?\b|football|soccer|cricket|\bnba\b|\bnfl\b|baseball|hockey|racing|formula ?1|\bf1\b|espn|talksport|deportes|esporte|sportradio|کرکٹ|رياضة|رياضه|체육|スポーツ/i;
-  const ENT_RE = /comedy|humou?r|entertain|kids|children|child|family|story|stories|storytelling|audiobook|audio book|drama|theat(er|re)|radio play|culture|cultural|arts\b|literature|poetry|podcast|lifestyle|youth|community|tamasha|manoranjan|مسلسل|ترفيه|मनोरंजन|बच्चों|子供|어린이|动漫|드라마/i;
-  const NOISE_TAGS = /^(radio|fm|am|online|internet|stream|live|music|musica|música|musik|webradio|web radio|hd|24\/7|247|station|free|top|best|the|and|[a-z]{2}|\d+)$/i;
-  const NEWS_STRICT = /news|noticia|nachricht|actualit|haber|berita|balita|khabar|samachar|akhbar|thời sự|tin tức|politic|current affairs|خبر|اخبار|أخبار|新闻|新聞|뉴스|ニュース|ข่าว|समाचार|সংবাদ|খবর|செய்தி|വാർത്ത|వార్త|ಸುದ್ದಿ/i;
-  const MUSIC_RE = /pop|rock|hits|top ?40|dance|electro|jazz|classical|lounge|chill|hip ?hop|rnb|r&b|country|latin|reggae|oldies|\d0s|bollywood|filmi|k-?pop|j-?pop|c-?pop|anime|khaleeji|tarab|opm|dangdut|ghazal|qawwali|carnatic|instrumental|ambient|metal|blues|soul|funk|house|techno|trance|music|musik|música|musica/i;
-  function genreOf(tags, name) {
-    const t = (tags || '') + ' ' + (name || '');
-    if (FAITH_RE.test(t)) return 'faith';
-    if (SPORTS_RE.test(tags || '')) return 'sports';
-    if (NEWS_STRICT.test(t)) return 'news';      // clearly news
-    if (ENT_RE.test(tags || '')) return 'ent';   // "entertainment, talk" is entertainment
-    if (MUSIC_RE.test(tags || '')) return 'music'; // music tags beat a news broadcaster's name (KBS Cool FM, BBC Radio 1)
-    if (NEWS_RE.test(t)) return 'news';          // talk / info / public broadcasters
-    return 'music';
-  }
-  function tagLine(tags) {
-    return String(tags || '').split(',').map((x) => x.trim()).filter((x) => x && x.length < 22 && !NOISE_TAGS.test(x)).slice(0, 2).join(', ');
-  }
-  const GENRE_NAME = { news: 'News & talk', music: 'Music', ent: 'Entertainment', sports: 'Sports', faith: 'Faith' };
-
-  const GOOD_CODECS = /^(MP3|AAC|AAC\+|OGG|OPUS|UNKNOWN|)$/i;
+  const GOOD_CODECS = /^(MP3|AAC|AAC\+|OGG|OPUS)$/i;
   const H3 = 3 * 3600 * 1000;
   const parseTime = (v) => {
     if (!v) return 0;
@@ -301,8 +252,8 @@
       const secure = url.startsWith('https://');
       // the app runs on HTTPS, so plain-HTTP streams are tried over HTTPS (many servers support both)
       if (!secure && location.protocol === 'https:') url = 'https://' + url.slice(7);
-      const isHls = s.hls === 1 || /\.m3u8(\?|$)/i.test(url); // HLS streams play through hls.js (common for Asian broadcasters)
-      if (s.codec && !GOOD_CODECS.test(s.codec) && !isHls) continue;
+      if (s.hls === 1 || /\.m3u8(\?|$)/i.test(url)) continue;
+      if (s.codec && !GOOD_CODECS.test(s.codec)) continue;
       const lat = +s.geo_lat, lng = +s.geo_long;
       let hasGeo = isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0) && s.geo_lat != null;
       let glat = lat, glng = lng;
@@ -327,15 +278,12 @@
         geo_lat: hasGeo ? +glat.toFixed(3) : null, geo_long: hasGeo ? +glng.toFixed(3) : null,
         secure,
         tags: (s.tags || '').toLowerCase(),
-        hls: isHls || undefined,
-        genre: genreOf(s.tags, s.name),
-        tagline: tagLine(s.tags) || undefined,
         lastClick: parseTime(s.clicktimestamp_iso8601 || s.clicktimestamp),
         region: regionOf((s.countrycode || '').toUpperCase()),
       });
     }
     // secure streams first (most reliable), then by popularity
-    return out.sort((a, b) => (b.secure - a.secure) || ((b.genre === 'news' ? 1 : 0) - (a.genre === 'news' ? 1 : 0)) || (b.clickcount - a.clickcount));
+    return out.sort((a, b) => (b.secure - a.secure) || (b.clickcount - a.clickcount));
   }
 
   async function loadStations() {
@@ -378,43 +326,12 @@
       'Radio Farda', 'Iran International', 'IRIB', 'Radio Azadi', 'Ozodi', 'Radio Ozodlik', 'Kazakh Radio', 'Mongolian National Radio',
       'TRT Haber', 'Sözcü', 'Habertürk', 'NTV Radyo', 'Kan Reshet Bet', 'Galei Tzahal', 'Radio Monte Carlo', 'Radio Sawa Iraq',
     ];
-    // Music & entertainment: worldwide genres, plus Asian and Gulf favourites
-    const ENT_TAGS = [
-      ['pop', 400], ['hits', 300], ['top 40', 200], ['rock', 250], ['classic rock', 100], ['dance', 150], ['electronic', 150],
-      ['jazz', 150], ['classical', 200], ['lounge', 80], ['chillout', 100], ['ambient', 60], ['hip hop', 150], ['rnb', 80],
-      ['country', 100], ['latin', 120], ['reggae', 60], ['oldies', 120], ['80s', 100], ['90s', 80], ['instrumental', 60],
-      ['bollywood', 250], ['hindi', 200], ['tamil', 120], ['malayalam', 100], ['telugu', 100], ['kannada', 50], ['punjabi', 60],
-      ['marathi', 30], ['bengali', 50], ['urdu', 60], ['ghazal', 40], ['qawwali', 30], ['sufi', 40], ['carnatic', 30], ['hindustani', 30],
-      ['k-pop', 80], ['kpop', 60], ['j-pop', 60], ['anime', 50], ['c-pop', 40], ['mandopop', 30], ['cantopop', 30],
-      ['arabic', 200], ['khaleeji', 40], ['tarab', 30], ['arabic pop', 60], ['turkish', 100], ['persian', 80], ['kurdish', 30],
-      ['opm', 50], ['filipino', 60], ['indonesian', 60], ['dangdut', 40], ['malay', 50], ['thai', 50], ['luk thung', 20],
-      ['vietnamese', 50], ['nepali', 30], ['sinhala', 30], ['afghan', 20],
-      ['comedy', 80], ['kids', 80], ['children', 50], ['entertainment', 200], ['culture', 100], ['drama', 40], ['audiobook', 30],
-      ['soundtrack', 50], ['podcast', 40], ['sports', 200], ['football', 60], ['cricket', 40],
-      ['quran', 100], ['islamic', 80], ['nasheed', 30], ['christian', 100], ['gospel', 60], ['devotional', 80], ['bhajan', 40],
-    ];
-    const FEATURED_ENT = [
-      'Radio Mirchi', 'Red FM', 'Big FM', 'Radio City', 'Fever FM', 'Club FM', 'Radio Mango', 'Suryan FM', 'Hello FM', 'Radio Suno',
-      'Radio Olive', 'Radio Asia', 'Hit 96.7', 'City 1016', 'Virgin Radio Dubai', 'Arabian Radio Network', 'Al Arabiya 99', 'Rotana',
-      'Nogoum FM', 'Mix FM', 'MBC FM', 'Panorama FM', 'Sawt El Ghad', 'Radio Javan', 'Power Türk', 'Kral FM', 'Süper FM',
-      'J-WAVE', 'FM802', 'InterFM', 'KBS Cool FM', 'MBC FM4U', 'SBS Power FM', 'Hit FM', 'Metro Broadcast', 'Yes 933', 'Gold 905',
-      'Hitz', 'Era FM', 'Sinar', 'Prambors', 'Gen FM', 'Wish 107.5', 'Love Radio', 'Magic 89.9', 'Cool Fahrenheit', 'Radio Foorti',
-      'Radio Today', 'Kantipur FM', 'Hiru FM', 'Sirasa FM', 'Mast FM', 'City FM 89', 'Arman FM', 'Mega FM', 'Love FM',
-    ];
     try {
       const paths = [
         ...TAGS.map(([t, n]) => `/json/stations/search?tag=${encodeURIComponent(t)}&tagExact=false&limit=${n}&${q}`),
         ...FEATURED.map((n) => `/json/stations/search?name=${encodeURIComponent(n)}&limit=12&${q}`),
         ...ASIA_CC.map((cc) => `/json/stations/search?countrycode=${cc}&tag=news&tagExact=false&limit=80&${q}`),
         ...['IN', 'PK', 'BD', 'PH', 'ID', 'JP', 'KR', 'CN', 'TR', 'SA', 'AE', 'IR'].map((cc) => `/json/stations/search?countrycode=${cc}&tag=talk&tagExact=false&limit=40&${q}`),
-        // the most-listened stations of every Asian & Middle Eastern country, any genre (many broadcasters aren't tagged "news")
-        ...ASIA_CC.map((cc) => `/json/stations/search?countrycode=${cc}&limit=${['IN', 'CN', 'JP', 'KR', 'ID', 'PH', 'PK', 'TR', 'IR', 'SA', 'AE', 'VN', 'TH', 'MY', 'BD'].includes(cc) ? 120 : 50}&${q}`),
-        // HLS streams (used by many Asian public broadcasters) now play too
-        ...['IN', 'CN', 'JP', 'KR', 'HK', 'TW', 'SG', 'MY', 'TH', 'VN', 'ID', 'PH', 'PK', 'BD', 'LK', 'NP', 'AE', 'SA', 'QA', 'IR', 'TR'].map((cc) => `/json/stations/search?countrycode=${cc}&is_https=true&codec=AAC&limit=40&${q}`),
-        // music & entertainment (after news, so news stations appear first)
-        '/json/stations/topclick/600?hidebroken=true', '/json/stations/topvote/300?hidebroken=true',
-        ...ENT_TAGS.map(([t, n]) => `/json/stations/search?tag=${encodeURIComponent(t)}&tagExact=false&limit=${n}&${q}`),
-        ...FEATURED_ENT.map((n) => `/json/stations/search?name=${encodeURIComponent(n)}&limit=8&${q}`),
       ];
       // polite: at most 6 requests at a time; show stations as soon as the first batches arrive
       const all = [];
@@ -449,12 +366,9 @@
   }
 
   function setStations(list, fromCache) {
-    // stations cached by an older version have no genre yet
-    for (const x of list) if (!x.genre) x.genre = genreOf(x.tags, x.name);
     state.stations = list;
     updateCount();
-    if (state.mode === 'radio') globe.pointsData(globeStations());
-    renderGenreChips();
+    if (state.mode === 'radio') globe.pointsData(list);
     applyFilter();
     // restore last station into the player (paused) so the app opens in a working state
     if (!state.current && !fromCache) {
@@ -471,7 +385,6 @@
   function applyFilter() {
     const q = state.query.trim().toLowerCase();
     state.filtered = state.stations.filter((s) => {
-      if (state.genre !== 'all' && s.genre !== state.genre) return false;
       if (state.region === 'fav') { if (!state.favs.has(s.stationuuid)) return false; }
       else if (state.region === 'recent') { if (!(s.lastClick && Date.now() - s.lastClick < H3)) return false; }
       else if (state.region !== 'all' && s.region !== state.region) return false;
@@ -508,7 +421,7 @@
         <div class="art">${artHTML(s)}</div>
         <div style="min-width:0">
           <div class="s-name">${esc(s.name)}</div>
-          <div class="s-meta">${flag(s.countrycode)} ${esc(s.country)}${stationDetail(s)}</div>
+          <div class="s-meta">${flag(s.countrycode)} ${esc(s.country)}${s.language ? ' · ' + esc(s.language.split(',')[0]) : ''}</div>
         </div>
         <div class="s-side">${s.stationuuid === cur && !audioPaused() ? '<span class="eq"><i></i><i></i><i></i></span>' : sideLabel(s)}</div>
       </li>`).join('');
@@ -519,11 +432,6 @@
       shown += PAGE; const top = el.scrollTop; renderList(false); el.scrollTop = top;
     }
   });
-  function stationDetail(s) {
-    const lang = s.language ? esc(s.language.split(',')[0]) : '';
-    if (s.genre === 'news' || !s.tagline) return lang ? ' · ' + lang : '';
-    return ' · ' + esc(s.tagline);
-  }
   function sideLabel(s) {
     if (s.lastClick && Date.now() - s.lastClick < H3 && (state.region === 'recent' || state.query.trim()))
       return `<span class="ago">● ${ago(s.lastClick)}</span>`;
@@ -539,30 +447,10 @@
     if (e.key === 'Enter' && e.target.dataset.id) e.target.click();
   });
   $('#search').addEventListener('input', (e) => { state.query = e.target.value; applyFilter(); });
-  // genre chips
-  function renderGenreChips() {
-    const counts = {};
-    for (const x of state.stations) counts[x.genre] = (counts[x.genre] || 0) + 1;
-    document.querySelectorAll('#genres .chip').forEach((c) => {
-      const g = c.dataset.genre;
-      c.setAttribute('aria-selected', String(g === state.genre));
-      const n = g === 'all' ? state.stations.length : counts[g] || 0;
-      c.querySelector('small').textContent = n ? n.toLocaleString() : '';
-    });
-  }
-  $('#genres').addEventListener('click', (e) => {
-    const b = e.target.closest('.chip[data-genre]'); if (!b) return;
-    state.genre = b.dataset.genre; store.set('gw-genre', state.genre);
-    renderGenreChips(); applyFilter(); refreshGlobePoints();
-    $('#stations').scrollTop = 0;
-  });
-  // the globe shows the chosen genre only
-  function globeStations() { return state.genre === 'all' ? state.stations : state.stations.filter((x) => x.genre === state.genre); }
-  function refreshGlobePoints() { if (state.mode === 'radio') { globe.pointsData(globeStations()); applyGlobeColors(); } }
   $('#regions').addEventListener('click', (e) => {
-    const b = e.target.closest('.chip[data-region]'); if (!b) return; // the News-only toggle has its own handler
+    const b = e.target.closest('.chip'); if (!b) return;
     state.region = b.dataset.region;
-    document.querySelectorAll('#regions .chip[data-region]').forEach((c) => c.setAttribute('aria-selected', String(c === b)));
+    document.querySelectorAll('#regions .chip').forEach((c) => c.setAttribute('aria-selected', String(c === b)));
     applyFilter();
     $('#stations').scrollTop = 0;
   });
@@ -603,7 +491,7 @@
         <div class="art">${artHTML(s)}</div>
         <div style="min-width:0">
           <div class="s-name">${esc(s.name)}</div>
-          <div class="s-meta">${flag(s.countrycode)} ${esc(s.country)}${stationDetail(s)}</div>
+          <div class="s-meta">${flag(s.countrycode)} ${esc(s.country)}${s.language ? ' · ' + esc(s.language.split(',')[0]) : ''}</div>
         </div>
         <div class="s-side"><span class="ago">● ${ago(s.lastClick)}</span></div>
       </li>`).join('');
@@ -643,6 +531,7 @@
 
   // Mobile bottom sheet
   const panel = $('#panel');
+  const mqMobile = matchMedia('(max-width: 760px)');
   if (mqMobile.matches) panel.classList.add('collapsed');
   $('#sheetHandle').addEventListener('click', () => {
     if (panel.classList.contains('expanded')) { panel.classList.remove('expanded'); panel.classList.add('collapsed'); }
@@ -683,12 +572,12 @@
     state.current = s;
     player.hidden = false;
     $('#npName').textContent = s.name;
-    $('#npMeta').innerHTML = `<span class="live">● LIVE</span> · ${s.genre && s.genre !== 'news' ? esc(GENRE_NAME[s.genre]) + ' · ' : ''}${flag(s.countrycode)} ${esc(s.country)}${s.codec ? ' · ' + esc(s.codec) : ''}${s.bitrate ? ' ' + s.bitrate + ' kbps' : ''}`;
+    $('#npMeta').innerHTML = `<span class="live">● LIVE</span> · ${flag(s.countrycode)} ${esc(s.country)}${s.codec ? ' · ' + esc(s.codec) : ''}${s.bitrate ? ' ' + s.bitrate + ' kbps' : ''}`;
     const art = $('#npArt'); art.className = 'np-art art'; art.innerHTML = artHTML(s);
     $('#favBtn').setAttribute('aria-pressed', String(state.favs.has(s.stationuuid)));
     player.classList.add('paused');
     setPlayerH();
-    if (state.mode === 'radio') globe.pointsData(globeStations()).ringsData(s.geo_lat != null ? [s] : []);
+    if (state.mode === 'radio') globe.pointsData(state.stations).ringsData(s.geo_lat != null ? [s] : []);
     applyGlobeColors();
     if (focus) {
       ctrl.autoRotate = false;
@@ -707,7 +596,6 @@
     document.body.classList.add('playing');
     if (mqMobile.matches && panel.classList.contains('expanded')) { panel.classList.remove('expanded'); panel.classList.add('collapsed'); }
     player.classList.add('loading');
-    destroyHls();
     [aCors, aPlain].forEach((a) => { a.pause(); a.removeAttribute('src'); a.load(); });
     clearCaptions();
     // Count the click with Radio Browser (helps their popularity ranking)
@@ -715,7 +603,7 @@
 
     // 1) try with CORS so we can read the audio for subtitles
     ensureAudioGraph();
-    corsOK = s.hls ? await playHls(aCors, s.url, token) : await tryPlay(aCors, s.url, token);
+    corsOK = await tryPlay(aCors, s.url, token);
     if (token !== playToken) return;
     if (corsOK) { active = aCors; }
     else {
@@ -733,30 +621,6 @@
     updateMediaSession(s);
     renderList(false);
     if (state.ccOn) startCaptions();
-  }
-
-  // HLS (.m3u8): hls.js feeds the stream into the page itself, so its audio is readable for subtitles.
-  // Safari plays HLS natively as a fallback.
-  let hlsInst = null;
-  function destroyHls() { if (hlsInst) { try { hlsInst.destroy(); } catch {} hlsInst = null; } }
-  function playHls(el, url, token) {
-    const Hls = window.Hls;
-    if (!Hls || !Hls.isSupported()) return tryPlay(el, url, token); // Safari / iOS: native HLS
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (ok) => { if (done) return; done = true; clearTimeout(to); el.removeEventListener('playing', onPlay); if (!ok) destroyHls(); resolve(ok); };
-      const onPlay = () => finish(true);
-      const to = setTimeout(() => finish(false), 15000);
-      destroyHls();
-      const h = new Hls({ enableWorker: true, lowLatencyMode: false, maxBufferLength: 20, manifestLoadingMaxRetry: 1, levelLoadingMaxRetry: 1, fragLoadingMaxRetry: 2 });
-      hlsInst = h;
-      h.on(Hls.Events.ERROR, (_, d) => { if (d && d.fatal) finish(false); });
-      h.on(Hls.Events.MANIFEST_PARSED, () => { const p = el.play(); if (p) p.catch(() => finish(false)); });
-      el.addEventListener('playing', onPlay);
-      h.loadSource(url);
-      h.attachMedia(el);
-      if (token !== playToken) finish(false);
-    });
   }
 
   function tryPlay(el, url, token) {
@@ -822,8 +686,7 @@
   let audioCtx = null, tap = null, worker = null, modelReady = false, modelLoading = false, busy = false;
   let buf = [], bufLen = 0, capturing = false, pending = null, device = 'wasm';
   const TARGET_SR = 16000, MAX_S = 12;
-  let chunkS = 6; // adapts to how fast this device translates (longer chunks = fewer cut sentences)
-  let asrQuality = store.get('gw-cc-quality', 'auto'); // auto | fast | accurate
+  let chunkS = 4; // adapts to how fast this device translates
 
   // Capture runs on the audio thread (AudioWorklet), so a busy page never drops audio;
   // blocks are queued and delivered in order. ScriptProcessor is only a fallback for old browsers.
@@ -920,9 +783,8 @@
     busy = false;
     // adapt chunk length: shorter when the device keeps up, longer when it falls behind
     const ratio = ms / 1000 / Math.max(1, secs);
-    // measured: chunks under ~4 s cut too many sentences; 6–9 s is the accuracy sweet spot
-    if (ratio < 0.35) chunkS = Math.max(device === 'webgpu' ? 4 : 5.5, chunkS - 0.5);
-    else if (ratio > 0.85) chunkS = Math.min(10, chunkS + 1);
+    if (ratio < 0.35) chunkS = Math.max(2.5, chunkS - 0.5);
+    else if (ratio > 0.85) chunkS = Math.min(8, chunkS + 1);
     if (pending && capturing) { const p = pending; pending = null; send(p); }
   }
 
@@ -971,9 +833,8 @@
       if (m.type === 'progress') {
         capStatus(`Downloading translator <span class="bar"><i style="width:${Math.round(m.pct)}%"></i></span> ${Math.round(m.pct)}%`);
       } else if (m.type === 'ready') {
-        modelReady = true; modelLoading = false; device = m.device || 'wasm'; asrLoaded = m.model || 'base';
-        chunkS = device === 'webgpu' ? 5 : 6.5;
-        renderCcMenu();
+        modelReady = true; modelLoading = false; device = m.device || 'wasm';
+        chunkS = device === 'webgpu' ? 3 : 5;
         capStatus('Listening… first words in a few seconds');
         if (corsOK && !active.paused) { buf = []; bufLen = 0; capturing = true; }
       } else if (m.type === 'partial') {
@@ -1016,7 +877,7 @@
     if (!modelReady && !modelLoading) {
       modelLoading = true;
       capStatus('Preparing translator…');
-      worker.postMessage({ type: 'load', language: langCode(state.current), quality: asrQuality });
+      worker.postMessage({ type: 'load', language: langCode(state.current) });
     } else if (modelReady) {
       buf = []; bufLen = 0; pending = null; capturing = true;
       worker.postMessage({ type: 'prepare', language: langCode(state.current) });
@@ -1041,35 +902,30 @@
   });
   $('#ccBtn').setAttribute('aria-pressed', String(state.ccOn));
 
-  // ---- translation accuracy menu (next to CC) ----
-  let asrLoaded = '';
-  const Q_LABEL = { auto: 'Auto', fast: 'Fast', accurate: 'Accurate' };
-  function renderCcMenu() {
-    document.querySelectorAll('.cc-opt').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.q === asrQuality)));
-    $('#ccNow').textContent = asrLoaded ? `Now using Whisper ${asrLoaded}${device === 'webgpu' ? ' on GPU' : ' on CPU'}` : 'Downloads when you turn on CC';
-  }
-  $('#ccMore').addEventListener('click', (e) => {
-    e.stopPropagation();
-    const m = $('#ccMenu'); m.hidden = !m.hidden; $('#ccMore').setAttribute('aria-expanded', String(!m.hidden)); renderCcMenu();
-  });
-  $('#ccMenu').addEventListener('click', (e) => {
-    const b = e.target.closest('.cc-opt'); if (!b) return;
-    asrQuality = b.dataset.q; store.set('gw-cc-quality', asrQuality); renderCcMenu();
-    $('#ccMenu').hidden = true;
-    if (worker && (modelReady || modelLoading)) {
-      // reload the speech model at the new size
-      modelReady = false; modelLoading = true; capturing = false;
-      capStatus('Switching translator…');
-      worker.postMessage({ type: 'load', language: langCode(state.current), quality: asrQuality });
-    }
-    toast(asrQuality === 'accurate' ? 'Accurate: larger model (~240 MB), best on phones/PCs with GPU' : asrQuality === 'fast' ? 'Fast: smaller model (~80 MB), quicker but less accurate' : 'Auto: accurate on GPU, fast on CPU', 3000);
-  });
-  document.addEventListener('click', (e) => { if (!e.target.closest('.cc-wrap')) $('#ccMenu').hidden = true; });
-
   // ---------- News mode: world newspaper headlines + news audio ----------
-  // Headlines come from many free sources at once (see news-sources.js), merged and de-duplicated,
-  // so one source being slow or down never leaves the list empty.
+  // Headlines: GDELT DOC 2.0 API (free, no key, monitors news sites in 100+ languages, CORS-enabled).
+  // Fallback: NewsAPI mirror on GitHub Pages (free, no key; has summaries and images for 6 countries).
   // Audio: the browser's built-in speech voices (Web Speech API).
+  const NEWS_TOPICS = {
+    top: '(government OR president OR minister OR election OR economy OR war OR court OR police OR crisis OR protest)',
+    world: '(international OR diplomacy OR "united nations" OR summit OR ceasefire OR sanctions OR embassy)',
+    business: '(economy OR markets OR stocks OR business OR inflation OR trade OR oil OR banking)',
+    tech: '(technology OR "artificial intelligence" OR software OR smartphone OR cyber OR startup)',
+    sports: '(football OR cricket OR olympics OR tennis OR "world cup" OR league OR championship)',
+    health: '(health OR hospital OR disease OR vaccine OR medical OR outbreak)',
+    science: '(science OR climate OR space OR research OR scientists OR environment)',
+  };
+  const NEWS_REGIONS = {
+    Asia: 'india china japan southkorea pakistan bangladesh indonesia philippines malaysia singapore thailand vietnam srilanka nepal taiwan hongkong myanmar cambodia kazakhstan uzbekistan afghanistan mongolia',
+    'Middle East': 'qatar saudiarabia unitedarabemirates kuwait bahrain oman iran iraq israel jordan lebanon syria turkey yemen',
+    Europe: 'unitedkingdom france germany italy spain netherlands poland ukraine russia sweden ireland belgium switzerland austria greece portugal norway denmark',
+    Americas: 'unitedstates canada mexico brazil argentina colombia chile peru venezuela cuba',
+    Africa: 'nigeria southafrica kenya ghana egypt ethiopia morocco algeria tanzania uganda zimbabwe senegal',
+    Oceania: 'australia newzealand fiji papuanewguinea',
+  };
+  const FALLBACK_CAT = { top: 'general', world: 'general', business: 'business', tech: 'technology', sports: 'sports', health: 'health', science: 'science' };
+  const FALLBACK_CC = { all: ['us', 'gb', 'in'], Asia: ['in'], 'Middle East': ['in'], Europe: ['gb', 'fr'], Americas: ['us'], Africa: ['us'], Oceania: ['au'] };
+
   // country name -> ISO code (for flags and globe placement)
   const NAME_CC = {};
   try {
@@ -1084,62 +940,87 @@
 
   const news = {
     topic: 'top', region: 'all', span: '3h', english: true, query: '', country: null,
-    items: [], earlier: [], points: [], loading: false, status: [], open: null,
-    speaking: -1, bulletin: false, reqId: 0, keys: store.get('gw-news-keys', {}),
+    items: [], points: [], loading: false, source: '', error: '', open: null,
+    speaking: -1, bulletin: false, lastCall: 0, reqId: 0,
   };
-  const NS = window.GWNewsSources;
 
-  const normTitle = (t) => String(t || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().slice(0, 70);
-  function mergeNews(raw) {
-    const seen = new Map();
-    for (const a of raw) {
-      if (!a.cc && a.country) a.cc = ccOf(a.country);
-      if (!a.country && a.cc) a.country = countryName(a.cc);
-      const k = normTitle(a.title);
-      if (!k) continue;
-      const prev = seen.get(k);
-      // keep the richest copy of a story (image + summary win)
-      if (!prev || (!prev.image && a.image) || (!prev.desc && a.desc && !(prev.image && !a.image))) seen.set(k, { ...prev, ...a, also: prev ? (prev.also || 1) + 1 : 1 });
-      else prev.also = (prev.also || 1) + 1;
-    }
-    const list = [...seen.values()].sort((x, y) => (y.time || 0) - (x.time || 0));
-    const cutoff = Date.now() - NS.spanMs(news.span);
-    let fresh = list.filter((x) => x.time && x.time >= cutoff);
-    const undated = list.filter((x) => !x.time);
-    const older = list.filter((x) => x.time && x.time < cutoff);
-    if (news.cc) { fresh = fresh.filter((x) => x.cc === news.cc); }
-    return { fresh: [...fresh, ...undated].slice(0, 200), earlier: older.filter((x) => !news.cc || x.cc === news.cc).slice(0, 60) };
+  function parseGdeltDate(v) {
+    const m = /^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/.exec(v || '');
+    return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : 0;
   }
-  let countryNamer = null;
-  try { countryNamer = new Intl.DisplayNames(['en'], { type: 'region' }); } catch {}
-  const countryName = (cc) => { try { return (countryNamer && countryNamer.of(cc)) || cc; } catch { return cc; } };
+  const gdeltCountry = (name) => 'sourcecountry:' + String(name).toLowerCase().replace(/[^a-z]/g, '');
+  function buildGdeltQuery() {
+    const parts = [];
+    const q = news.query.trim();
+    if (q) parts.push(/\s/.test(q) && !/["()]|\bOR\b/.test(q) ? `"${q.replace(/"/g, '')}"` : q);
+    else parts.push(NEWS_TOPICS[news.topic]);
+    if (news.country) parts.push(gdeltCountry(news.country));
+    else if (news.region !== 'all') parts.push('(' + NEWS_REGIONS[news.region].split(' ').map((c) => 'sourcecountry:' + c).join(' OR ') + ')');
+    if (news.english) parts.push('sourcelang:english');
+    return parts.join(' ');
+  }
+  // GDELT asks for at most one request every 5 seconds
+  async function gdeltThrottle() {
+    const wait = news.lastCall + 5200 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    news.lastCall = Date.now();
+  }
+  async function fetchGdelt() {
+    await gdeltThrottle();
+    const url = 'https://api.gdeltproject.org/api/v2/doc/doc?mode=artlist&format=json&sort=datedesc&maxrecords=120'
+      + `&timespan=${news.span}&query=${encodeURIComponent(buildGdeltQuery())}`;
+    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 15000);
+    const r = await fetch(url, { signal: ctl.signal }); clearTimeout(to);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { try { data = JSON.parse(text.replace(/[\u0000-\u001f]+/g, ' ')); } catch { throw new Error(text.slice(0, 120) || 'Unreadable response'); } }
+    const seen = new Set();
+    return (data.articles || []).map((a) => ({
+      title: String(a.title || '').replace(/\s+/g, ' ').trim(),
+      url: a.url, domain: a.domain || '', country: a.sourcecountry || '', cc: ccOf(a.sourcecountry),
+      lang: a.language || '', time: parseGdeltDate(a.seendate), image: /^https:\/\//.test(a.socialimage || '') ? a.socialimage : '',
+      desc: '', src: 'GDELT',
+    })).filter((a) => {
+      const k = a.title.toLowerCase().slice(0, 80);
+      if (!a.title || a.title.length < 12 || seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+  }
+  const CC_NAME = { us: 'United States', gb: 'United Kingdom', in: 'India', au: 'Australia', fr: 'France', ru: 'Russia' };
+  async function fetchFallback() {
+    const cat = FALLBACK_CAT[news.topic] || 'general';
+    const ccs = news.country ? [ (ccOf(news.country) || 'us').toLowerCase() ].filter((c) => CC_NAME[c]) : FALLBACK_CC[news.region] || ['us'];
+    const res = await Promise.allSettled((ccs.length ? ccs : ['us']).map((cc) =>
+      fetch(`https://saurav.tech/NewsAPI/top-headlines/category/${cat}/${cc}.json`).then((r) => r.json()).then((d) => ({ cc, d }))));
+    const q = news.query.trim().toLowerCase();
+    return res.flatMap((r) => r.status === 'fulfilled' ? (r.value.d.articles || []).map((a) => ({
+      title: String(a.title || '').trim(), url: a.url, domain: (a.source && a.source.name) || '',
+      country: CC_NAME[r.value.cc], cc: r.value.cc.toUpperCase(), lang: 'English',
+      time: Date.parse(a.publishedAt) || 0, image: /^https:\/\//.test(a.urlToImage || '') ? a.urlToImage : '',
+      desc: a.description || '', src: 'NewsAPI mirror',
+    })) : []).filter((a) => a.title && (!q || (a.title + ' ' + a.desc).toLowerCase().includes(q)))
+      .sort((a, b) => b.time - a.time);
+  }
 
   async function loadNews() {
     const id = ++news.reqId;
-    news.loading = true; news.status = []; stopSpeaking();
-    news.cc = news.country ? ccOf(news.country) : null;
-    renderNews(); updateCount();
-    if (!NS) { news.loading = false; renderNews(); return; }
-    const apply = (raw, status, done) => {
-      if (id !== news.reqId) return;
-      const { fresh, earlier } = mergeNews(raw);
-      news.items = fresh; news.earlier = earlier; news.status = status;
-      if (done) { news.loading = false; try { if (fresh.length) localStorage.setItem('gw-news-last', JSON.stringify({ t: Date.now(), items: fresh.slice(0, 80) })); } catch {} }
-      if (news.open != null && news.open >= news.items.length) news.open = null;
-      buildNewsPoints();
-      const ul = $('#newsList'), top = ul.scrollTop; renderNews(); ul.scrollTop = top;
-      if (state.mode === 'news') updateCount();
-    };
-    await NS.fetchAll({
-      topic: news.topic, region: news.region, country: news.country, cc: news.cc, query: news.query,
-      span: news.span, english: news.english, keys: news.keys,
-    }, apply);
+    news.loading = true; news.error = ''; stopSpeaking();
+    renderNews();
+    let items = [], source = '';
+    try { items = await fetchGdelt(); source = 'GDELT'; }
+    catch (e) { news.error = String(e.message || e); }
+    if (id !== news.reqId) return;
+    if (!items.length) {
+      try { const fb = await fetchFallback(); if (fb.length) { items = fb; source = 'NewsAPI mirror'; } } catch {}
+    }
+    if (id !== news.reqId) return;
+    news.items = items; news.source = source; news.loading = false; news.open = null;
+    buildNewsPoints();
+    renderNews();
+    if (state.mode === 'news') updateCount();
   }
-  // show the last headlines instantly while fresh ones load
-  try {
-    const last = JSON.parse(localStorage.getItem('gw-news-last') || 'null');
-    if (last && last.items && Date.now() - last.t < 12 * 3600e3) news.items = last.items;
-  } catch {}
 
   function buildNewsPoints() {
     const by = new Map();
@@ -1151,9 +1032,9 @@
     news.points = [...by.values()];
     if (state.mode === 'news') globe.pointsData(news.points).ringsData([]);
   }
-  function pickList() { return state.mode === 'news' ? news.points : globeStations(); }
+  function pickList() { return state.mode === 'news' ? news.points : state.stations; }
   function pickNewsCountry(p) {
-    news.country = p.country || countryName(p.cc); news.query = ''; $('#newsSearch').value = '';
+    news.country = p.country; news.query = ''; $('#newsSearch').value = '';
     globe.pointOfView({ lat: p.geo_lat, lng: p.geo_long, altitude: mqMobile.matches ? 2.2 : 1.8 }, 1200);
     ctrl.autoRotate = false; clearTimeout(resumeT);
     resumeT = setTimeout(() => (ctrl.autoRotate = !matchMedia('(prefers-reduced-motion: reduce)').matches), 9000);
@@ -1181,7 +1062,6 @@
           <div><dt>Source</dt><dd>${esc(a.domain || '—')}</dd></div>
           <div><dt>Country</dt><dd>${a.cc ? flag(a.cc) + ' ' : ''}${esc(a.country || '—')}</dd></div>
           <div><dt>Language</dt><dd>${esc(a.lang || '—')}</dd></div>
-          <div><dt>Found via</dt><dd>${esc(a.src || '—')}${a.also > 1 ? ` · ${a.also} reports` : ''}</dd></div>
           <div><dt>Published</dt><dd>${a.time ? esc(new Date(a.time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + ' · ' + esc(newsAgo(a.time)) : '—'}</dd></div>
         </dl>
         <div class="n-actions">
@@ -1192,12 +1072,6 @@
       </div>` : ''}
     </li>`;
   }
-  const newsAll = () => news.items.concat(news.earlier || []);
-  function sourcesSummary() {
-    const st = news.status || [];
-    const ok = st.filter((x) => x.state === 'ok').length, busy = st.filter((x) => x.state === 'loading').length;
-    return { ok, busy, total: st.length };
-  }
   function renderNews() {
     const ul = $('#newsList');
     const f = $('#newsFilter');
@@ -1205,67 +1079,16 @@
     if (news.country) bits.push(`<button class="chip filter-chip" data-clear="country" aria-selected="true">${flag(ccOf(news.country))} ${esc(news.country)} ✕</button>`);
     if (news.query.trim()) bits.push(`<button class="chip filter-chip" data-clear="query" aria-selected="true">“${esc(news.query.trim())}” ✕</button>`);
     f.innerHTML = bits.join(''); f.hidden = !bits.length;
-    const { ok, busy, total } = sourcesSummary();
-    $('#sourcesCount').textContent = total ? `${ok}/${total}` : '';
-    $('#sourcesBtn').classList.toggle('busy', busy > 0);
-    if (!$('#sourcesPanel').hidden) renderSources();
-    const all = newsAll();
-    if (!all.length && news.loading) { ul.innerHTML = Array.from({ length: 6 }, () => '<li class="skeleton"></li>').join(''); return; }
+    if (news.loading && !news.items.length) { ul.innerHTML = Array.from({ length: 6 }, () => '<li class="skeleton"></li>').join(''); return; }
     const spanText = { '1h': 'last hour', '3h': 'last 3 hours', '24h': 'last 24 hours' }[news.span];
-    const head = `<li class="sec-head">${news.items.length} headlines · ${spanText}<span>${news.loading ? `loading ${busy} source${busy === 1 ? '' : 's'}…` : `${ok} source${ok === 1 ? '' : 's'}`}</span></li>`;
-    if (!all.length) {
-      const offline = navigator.onLine === false;
-      ul.innerHTML = head + `<li class="sec-note">${offline ? 'You’re offline. Headlines will load when you reconnect.'
-        : total && !ok ? 'None of the news sources could be reached from here. If you opened G-Wave inside a preview or an app, open it in your browser (Chrome, Safari, Edge). <button class="link-btn" data-act="sources">See sources</button>'
-        : 'No headlines match. Try a wider time window, another topic, or clear the search.'}</li>`;
+    let head = `<li class="sec-head">${news.loading ? 'Refreshing…' : `${news.items.length} headlines · ${spanText}`}<span>${esc(news.source)}</span></li>`;
+    if (news.source === 'NewsAPI mirror') head += `<li class="sec-note">The live news index is busy, so these come from a backup source with summaries for a few countries. Check the dates.</li>`;
+    if (!news.items.length) {
+      ul.innerHTML = head + `<li class="sec-note">${news.error && /limit|one every/i.test(news.error) ? 'The news service asked us to slow down. Try again in a few seconds.' : 'No headlines found. Try a wider time window, another topic, or turn off “English only”.'}</li>`;
       return;
     }
-    let html = head;
-    if (!news.items.length) html += `<li class="sec-note">Nothing new in the ${spanText}. Here are the latest earlier headlines.</li>`;
-    html += news.items.map((a, i) => newsCard(a, i)).join('');
-    if (news.earlier && news.earlier.length) {
-      html += `<li class="sec-head">Earlier<span>${news.earlier.length}</span></li>`;
-      html += news.earlier.map((a, k) => newsCard(a, news.items.length + k)).join('');
-    }
-    ul.innerHTML = html;
+    ul.innerHTML = head + news.items.map(newsCard).join('');
   }
-
-  // ---- sources panel: live status + optional free API keys ----
-  function renderSources() {
-    const st = news.status || [];
-    const icon = { ok: '✓', empty: '–', error: '✕', loading: '…' };
-    const rows = st.map((x) => `<li class="src-row ${x.state}">
-        <span class="src-dot" aria-hidden="true">${icon[x.state]}</span>
-        <span class="src-name"><b>${esc(x.name)}</b><small>${esc(x.kind)}${x.state === 'error' ? ' · ' + esc(x.error) : ''}</small></span>
-        <span class="src-n">${x.state === 'loading' ? 'loading' : x.state === 'error' ? 'unavailable' : `${x.count} · ${(x.ms / 1000).toFixed(1)}s`}</span>
-      </li>`).join('');
-    const keys = Object.entries(NS ? NS.KEYED : {}).map(([id, d]) => `<div class="key-row">
-        <label for="key-${id}"><b>${esc(d.label)}</b><small>Free: ${esc(d.free)} · <a href="${esc(d.signup)}" target="_blank" rel="noopener noreferrer">get a key ↗</a></small></label>
-        <input id="key-${id}" data-key="${id}" type="password" autocomplete="off" spellcheck="false" placeholder="Paste API key" value="${esc(news.keys[id] || '')}">
-      </div>`).join('');
-    $('#sourcesBody').innerHTML = `
-      <p class="menu-label">Sources for this view</p>
-      <ul class="src-list">${rows || '<li class="sec-note">Sources appear here when headlines load.</li>'}</ul>
-      <p class="menu-label">More sources with your own free key</p>
-      <p class="sec-note">Optional. Keys stay in this browser only and are sent only to that provider.</p>
-      ${keys}
-      <div class="n-actions"><button class="n-btn primary" id="saveKeys">Save keys & reload</button></div>`;
-  }
-  $('#sourcesBtn').addEventListener('click', () => {
-    const p = $('#sourcesPanel'); p.hidden = !p.hidden;
-    $('#sourcesBtn').setAttribute('aria-expanded', String(!p.hidden));
-    if (!p.hidden) renderSources();
-  });
-  $('#sourcesPanel').addEventListener('click', (e) => {
-    if (e.target.closest('#sourcesClose')) { $('#sourcesPanel').hidden = true; $('#sourcesBtn').setAttribute('aria-expanded', 'false'); }
-    if (e.target.closest('#saveKeys')) {
-      const keys = {};
-      $('#sourcesPanel').querySelectorAll('[data-key]').forEach((inp) => { const v = inp.value.trim(); if (v) keys[inp.dataset.key] = v; });
-      news.keys = keys; store.set('gw-news-keys', keys);
-      toast(Object.keys(keys).length ? `Saved ${Object.keys(keys).length} key${Object.keys(keys).length === 1 ? '' : 's'}` : 'Keys cleared', 1600);
-      loadNews();
-    }
-  });
 
   // ---- news audio (Web Speech API) ----
   const synth = window.speechSynthesis;
@@ -1290,149 +1113,68 @@
       });
     } catch {}
   }
-  // ---- speech engine ----
-  // Device voices first (free, offline). Fixes for known browser problems:
-  //  · Chrome stops speaking after ~15 s → text is split into short sentences
-  //  · Chrome loses the "finished" event if the utterance object is garbage-collected → we keep references
-  //  · Chrome ignores speak() right after cancel() → short delay only when something was playing
-  //  · Safari/iOS only speaks when started by a tap → the first sentence always starts inside the tap
-  //  · Android in-app browsers / WebViews often have no voices → automatic switch to an online voice
-  const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
-  const tts = { mode: synth ? store.get('gw-tts-mode', 'device') : 'online', token: 0, keep: [], audio: new Audio(), watch: 0 };
-  tts.audio.preload = 'auto';
-  function chunkText(text, max = 170) {
-    const out = [];
-    const sentences = String(text).replace(/\s+/g, ' ').trim().split(/(?<=[.!?。！？؟।])\s+/);
-    for (let sen of sentences) {
-      while (sen.length > max) {
-        let cut = sen.lastIndexOf(', ', max); if (cut < 40) cut = sen.lastIndexOf(' ', max); if (cut < 40) cut = max;
-        out.push(sen.slice(0, cut + 1).trim()); sen = sen.slice(cut + 1).trim();
-      }
-      if (sen) out.push(sen);
-    }
-    return out;
-  }
-  // unlock audio playback inside the user's tap (needed by iOS for the online voice)
-  function primeAudio() {
-    try { tts.audio.src = SILENT_WAV; const p = tts.audio.play(); if (p) p.catch(() => {}); } catch {}
-    try { if (synth && synth.paused) synth.resume(); } catch {}
-  }
-  function deviceSay(part, langName, done, token) {
-    const u = new SpeechSynthesisUtterance(part);
+  function say(text, langName, onend) {
+    const u = new SpeechSynthesisUtterance(text);
     const { code, voice } = voiceFor(langName);
     if (voice) u.voice = voice;
     u.lang = voice ? voice.lang : code; u.rate = 1; u.pitch = 1;
-    let started = false, finished = false;
-    const finish = () => { if (finished) return; finished = true; clearTimeout(tts.watch); if (token === tts.token) done(); };
-    u.onstart = () => { started = true; };
-    u.onend = finish;
-    u.onerror = (e) => {
-      if (e && (e.error === 'interrupted' || e.error === 'canceled')) return;
-      if (!started && token === tts.token) { switchToOnline(); onlineSay(part, langName, done, token); finished = true; } else finish();
-    };
-    tts.keep.push(u); if (tts.keep.length > 30) tts.keep.shift();
+    u.onend = onend; u.onerror = onend;
     synth.speak(u);
-    // no sound within 3 s means this device has no working voice: use the online voice from now on
-    clearTimeout(tts.watch);
-    tts.watch = setTimeout(() => {
-      if (!started && !finished && token === tts.token) { finished = true; try { synth.cancel(); } catch {} switchToOnline(); onlineSay(part, langName, done, token); }
-    }, 3000);
-    // safety net: if the end event never arrives, move on after a generous time
-    setTimeout(() => { if (started && !finished && !synth.speaking) finish(); }, 1500 + part.length * 120);
-  }
-  function switchToOnline() {
-    if (tts.mode === 'online') return;
-    tts.mode = 'online'; store.set('gw-tts-mode', 'online');
-    toast('Using an online voice (this device has no built-in voice)', 3000);
-  }
-  // Free online text-to-speech, tried in order
-  const ONLINE_TTS = [
-    (t, lang) => `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(lang)}&q=${encodeURIComponent(t)}`,
-    (t, lang) => (lang === 'en' ? `https://api.streamelements.com/kappa/v2/speech?voice=Brian&text=${encodeURIComponent(t)}` : null),
-  ];
-  function onlineSay(part, langName, done, token, k = 0) {
-    const lang = LANG[String(langName || '').toLowerCase()] || 'en';
-    const make = ONLINE_TTS[k];
-    if (!make) { if (token === tts.token) { toast('News audio isn’t available right now. Check your connection.', 3000); stopSpeaking(); } return; }
-    const url = make(part, lang);
-    if (!url) return onlineSay(part, langName, done, token, k + 1);
-    const a = tts.audio;
-    a.onended = () => { if (token === tts.token) done(); };
-    a.onerror = () => { if (token === tts.token) onlineSay(part, langName, done, token, k + 1); };
-    a.src = url;
-    const p = a.play(); if (p) p.catch(() => { if (token === tts.token) onlineSay(part, langName, done, token, k + 1); });
-  }
-  // speak text (any length) and call onend when finished; returns nothing
-  function say(text, langName, onend) {
-    const token = ++tts.token;
-    const parts = chunkText(text);
-    let i = 0;
-    const next = () => {
-      if (token !== tts.token) return;
-      if (i >= parts.length) { if (onend) onend(); return; }
-      const part = parts[i++];
-      if (tts.mode === 'device' && synth) deviceSay(part, langName, next, token);
-      else onlineSay(part, langName, next, token);
-    };
-    if (tts.mode === 'device' && synth && (synth.speaking || synth.pending)) { synth.cancel(); setTimeout(next, 120); }
-    else next();
   }
   function stopSpeaking() {
-    tts.token++;
     news.bulletin = false;
-    clearTimeout(tts.watch);
-    try { if (synth && (synth.speaking || synth.pending)) synth.cancel(); } catch {}
-    try { tts.audio.pause(); tts.audio.removeAttribute('src'); } catch {}
-    if (news.speaking !== -1) { news.speaking = -1; globe.ringsData([]); renderNews(); }
+    if (synth) synth.cancel();
+    if (news.speaking !== -1) { news.speaking = -1; renderNews(); }
     $('#bulletinBtn').setAttribute('aria-pressed', 'false');
     $('#bulletinBtn').querySelector('span').textContent = 'Play bulletin';
   }
   function speakItem(i, then) {
-    const a = newsAll()[i]; if (!a) { stopSpeaking(); return; }
-    if (state.current && !audioPaused()) { active.pause(); player.classList.add('paused'); stopCaptions(false); } // pause the radio while reading
+    const a = news.items[i]; if (!a) { stopSpeaking(); return; }
+    if (state.current && !audioPaused()) $('#playBtn').click(); // pause the radio while reading the news
     news.speaking = i; renderNews();
     const li = $(`#newsList [data-i="${i}"]`); if (li) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     if (CENTROID[a.cc]) globe.ringsData([{ geo_lat: CENTROID[a.cc][0], geo_long: CENTROID[a.cc][1] }]);
     const from = [a.domain, a.country].filter(Boolean).join(', ');
     const english = !a.lang || /english/i.test(a.lang);
-    const text = `${a.title}. ${a.desc && a.desc !== a.title ? a.desc + ' ' : ''}${english && from ? `From ${from}.` : ''}`;
+    const text = `${a.title}. ${a.desc ? a.desc + ' ' : ''}${english ? `From ${from}.` : ''}`;
     say(text, a.lang, () => {
       if (news.speaking !== i) return;
       if (then) then(); else { news.speaking = -1; globe.ringsData([]); renderNews(); }
     });
   }
   function startBulletin() {
-    if (!newsAll().length) return;
-    primeAudio();
+    if (!synth) { toast('This browser has no built-in voices, so news audio isn’t available.'); return; }
+    if (!news.items.length) return;
+    synth.cancel();
     news.bulletin = true;
     $('#bulletinBtn').setAttribute('aria-pressed', 'true');
     $('#bulletinBtn').querySelector('span').textContent = 'Stop';
-    const n = Math.min(newsAll().length, 20);
+    const n = Math.min(news.items.length, 20);
     const where = news.country || (news.region === 'all' ? 'around the world' : news.region);
-    if (state.current && !audioPaused()) { active.pause(); player.classList.add('paused'); stopCaptions(false); }
-    // the intro starts inside the tap, so Safari/iOS allow it
-    say(`G-Wave news. ${n} headlines from ${where}.`, 'english', () => {
-      let i = 0;
-      const next = () => {
-        if (!news.bulletin) return;
-        if (i >= n) { say('That was the G-Wave bulletin.', 'english', stopSpeaking); return; }
-        const k = i++;
-        chime();
-        setTimeout(() => { if (news.bulletin) speakItem(k, next); }, 450);
-      };
-      next();
-    });
+    chime();
+    setTimeout(() => {
+      say(`G-Wave news. ${n} headlines from ${where}.`, 'english', () => {
+        let i = 0;
+        const next = () => {
+          if (!news.bulletin) return;
+          if (i >= n) { say('That was the G-Wave bulletin.', 'english', stopSpeaking); return; }
+          const k = i++;
+          setTimeout(() => news.bulletin && (chime(), speakItem(k, next)), 450);
+        };
+        next();
+      });
+    }, 500);
   }
 
   // ---- news UI events ----
   $('#newsList').addEventListener('click', (e) => {
-    if (e.target.closest('[data-act="sources"]')) { $('#sourcesBtn').click(); return; }
     const li = e.target.closest('.news-item'); if (!li) return;
-    const i = +li.dataset.i, a = newsAll()[i];
+    const i = +li.dataset.i, a = news.items[i];
     const act = e.target.closest('[data-act]');
     if (act && act.dataset.act === 'listen') {
       if (news.speaking === i) stopSpeaking();
-      else { primeAudio(); stopSpeaking(); speakItem(i); }
+      else if (!synth) toast('This browser has no built-in voices, so news audio isn’t available.');
+      else { stopSpeaking(); speakItem(i); }
       return;
     }
     if (act && act.dataset.act === 'globe') {
@@ -1472,7 +1214,7 @@
 
   // ---------- Radio / News mode switch ----------
   const HERO = {
-    radio: ['World radio, live', 'Spin the planet.<br>Tune in anywhere.', 'News, music and entertainment from every country. Tap a glowing point to listen, pick a genre below, and turn on CC for live English translation of talk stations.'],
+    radio: ['World news radio, live', 'Spin the planet.<br>Hear the headlines.', 'Tap any glowing point to tune in to a news station. Turn on CC for live English translation, then search any topic to see what was said in the last 3 hours.'],
     news: ['World newspapers, live', 'Every front page.<br>One planet.', 'Headlines from news sites in every country, updated every 15 minutes. Tap a country to filter, open a story for details, or play a spoken bulletin.'],
   };
   function updateCount() {
@@ -1505,7 +1247,7 @@
       globe
         .pointAltitude((d) => (state.current && d.stationuuid === state.current.stationuuid ? 0.03 : 0.012))
         .pointRadius((d) => (state.current && d.stationuuid === state.current.stationuuid ? 0.55 : (state.stations.length > 1500 ? 0.2 : 0.34)))
-        .pointsData(globeStations()).ringsData(state.current && state.current.geo_lat != null ? [state.current] : []);
+        .pointsData(state.stations).ringsData(state.current && state.current.geo_lat != null ? [state.current] : []);
     }
     applyGlobeColors();
     updateCount();
@@ -1513,44 +1255,6 @@
   }
   $('#modeBtn').addEventListener('click', () => setMode(state.mode === 'news' ? 'radio' : 'news'));
   setMode(state.mode, true);
-
-  // ---------- layout menu ----------
-  const LAYOUT_LABEL = { auto: 'Auto', mobile: 'Mobile', tab: 'Tab' };
-  function renderLayoutButton() {
-    $('#layoutIcon').innerHTML = LAYOUT_ICONS[layoutPref];
-    $('#layoutBadge').textContent = layoutPref === 'auto' ? 'A' : '';
-    $('#layoutBadge').hidden = layoutPref !== 'auto';
-    $('#layoutBtn').setAttribute('aria-label', `Layout: ${LAYOUT_LABEL[layoutPref]}${layoutPref === 'auto' ? ` (now ${layoutNow === 'tab' ? 'Tab' : layoutNow === 'mobile' ? 'Mobile' : 'Desktop'})` : ''}`);
-    $('#layoutBtn').title = $('#layoutBtn').getAttribute('aria-label');
-    document.querySelectorAll('.layout-opt').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.layout === layoutPref)));
-  }
-  function relayout() {
-    const prev = layoutNow;
-    layoutNow = resolveLayout();
-    if (prev !== layoutNow) {
-      applyLayoutClass();
-      panel.classList.remove('collapsed', 'expanded');
-      if (layoutNow === 'mobile') panel.classList.add('collapsed');
-      globe.pointOfView({ altitude: layoutNow === 'mobile' ? 3.5 : layoutNow === 'tab' ? 2.9 : 2.6 }, 600);
-    }
-    sizeGlobe(); setPlayerH(); renderLayoutButton();
-  }
-  $('#layoutBtn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    const m = $('#layoutMenu'); m.hidden = !m.hidden;
-    $('#layoutBtn').setAttribute('aria-expanded', String(!m.hidden));
-    $('#skinMenu').hidden = true;
-  });
-  $('#layoutMenu').addEventListener('click', (e) => {
-    const b = e.target.closest('.layout-opt'); if (!b) return;
-    layoutPref = b.dataset.layout; store.set('gw-layout', layoutPref);
-    $('#layoutMenu').hidden = true; $('#layoutBtn').setAttribute('aria-expanded', 'false');
-    relayout();
-    toast(layoutPref === 'auto' ? 'Layout follows your screen' : `${LAYOUT_LABEL[layoutPref]} layout`, 1600);
-  });
-  document.addEventListener('click', (e) => { if (!e.target.closest('.layout-wrap')) $('#layoutMenu').hidden = true; });
-  window.addEventListener('resize', () => { clearTimeout(relayout._t); relayout._t = setTimeout(relayout, 150); });
-  renderLayoutButton();
 
   // ---------- PWA ----------
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
